@@ -4,6 +4,7 @@
 
 - 板卡网络初始化脚本
 - PaddleSpeech ARM Linux 运行包构建与上板脚本
+- 批量测试计划、结果归档与可视化报告脚本
 - 指标、差距、部署说明与选型报告
 - 本地构建产物与板端冒烟回传结果
 
@@ -25,18 +26,20 @@
 ├─ scripts/
 │  ├─ board/
 │  ├─ delivery/
+│  ├─ testing/
 │  └─ release/
 └─ artifacts/
    ├─ cache/
    ├─ releases/
    ├─ source-bundles/
+│  └─ test-runs/
    └─ runtime/
 ```
 
 ## 入口说明
 
 - 推荐通过 uv run 直接执行 scripts 目录下的 Python 入口。
-- 实际实现位于 scripts/board、scripts/delivery 和 scripts/release。
+- 实际实现位于 scripts/board、scripts/delivery、scripts/testing 和 scripts/release。
 
 ## Python 环境
 
@@ -54,6 +57,7 @@ uv sync
 ```powershell
 uv run python scripts/delivery/prepare_paddlespeech_tts_armlinux.py build
 uv run python scripts/delivery/prepare_paddlespeech_tts_armlinux.py upload --source-ip 169.254.46.223
+uv run python scripts/testing/run_tts_test_suite.py run --category latency
 uv run python scripts/board/set_board_static_ipv4.py
 ./scripts/release/package_release.ps1 -Version v1.0.0 -IncludeRuntimeBundle -IncludeEvidence
 ```
@@ -66,6 +70,7 @@ uv run python scripts/board/set_board_static_ipv4.py
 - 选型报告：docs/reports/免费商用离线TTS技术选型详细汇报报告.md
 - 交付清单：docs/delivery/交付清单.md
 - 部署手册：docs/delivery/部署手册.md
+- 测试手册：docs/delivery/测试手册.md
 - 验收手册：docs/delivery/验收手册.md
 - 回退手册：docs/delivery/回退手册.md
 - 发布手册：docs/delivery/发布手册.md
@@ -80,6 +85,7 @@ uv run python scripts/board/set_board_static_ipv4.py
 
 - config/local/board.local.env
 - config/local/delivery.local.env
+- config/local/tts_test_plan.json
 
 配置优先级：
 
@@ -93,6 +99,7 @@ uv run python scripts/board/set_board_static_ipv4.py
 - 下载缓存：artifacts/cache/
 - 离线源码包：artifacts/source-bundles/
 - 运行包与回传结果：artifacts/runtime/
+- 批量测试报告：artifacts/test-runs/
 
 当前默认运行包目录：
 
@@ -105,6 +112,14 @@ uv run python scripts/board/set_board_static_ipv4.py
 当前默认发布目录：
 
 - artifacts/releases/
+
+当前默认测试计划模板：
+
+- config/examples/tts_test_plan.example.json
+
+当前默认测试报告目录：
+
+- artifacts/test-runs/
 
 发布脚本会在发布包根目录额外生成：
 

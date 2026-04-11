@@ -1,0 +1,113 @@
+{
+  "name": "rk3588-baseline-suite",
+  "description": "RK3588 板端离线 TTS 的工程化批量测试基线，覆盖冒烟、时延、领域词和长稳短循环。",
+  "defaults": {
+    "repeat": 3,
+    "warmup": 1,
+    "max_warning_count": 6,
+    "must_not_contain": [
+      "Traceback",
+      "Segmentation fault",
+      "Assertion"
+    ]
+  },
+  "cases": [
+    {
+      "id": "smoke-welcome",
+      "name": "启动欢迎词",
+      "category": "smoke",
+      "tags": [
+        "smoke",
+        "baseline"
+      ],
+      "sentence": "你好，欢迎使用离线语音合成服务。"
+    },
+    {
+      "id": "latency-short-command",
+      "name": "短句通信指令",
+      "category": "latency",
+      "tags": [
+        "latency",
+        "command"
+      ],
+      "sentence": "短波电台指令测试。",
+      "repeat": 5,
+      "warmup": 1,
+      "latency_threshold_ms": 900.0,
+      "rtf_threshold": 0.35
+    },
+    {
+      "id": "latency-medium-command",
+      "name": "中句通信指令",
+      "category": "latency",
+      "tags": [
+        "latency",
+        "command"
+      ],
+      "sentence": "请保持三点五兆赫待机，收到命令后立即回传。",
+      "repeat": 5,
+      "warmup": 1,
+      "latency_threshold_ms": 1100.0,
+      "rtf_threshold": 0.40
+    },
+    {
+      "id": "domain-frequency",
+      "name": "频点播报",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "frequency"
+      ],
+      "sentence": "当前工作频点为七点零五兆赫。"
+    },
+    {
+      "id": "domain-callsign",
+      "name": "呼号播报",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "callsign"
+      ],
+      "sentence": "海鹰一号呼叫前指，收到请回答。"
+    },
+    {
+      "id": "domain-coordinate",
+      "name": "坐标与数字串",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "number"
+      ],
+      "sentence": "请记录坐标一二零点三五，北纬三十一点二八。"
+    },
+    {
+      "id": "stability-short-loop",
+      "name": "长稳基线短循环",
+      "category": "stability",
+      "tags": [
+        "stability",
+        "soak"
+      ],
+      "sentence": "系统进入长稳自检流程，请持续监测输出状态。",
+      "repeat": 20,
+      "warmup": 2,
+      "latency_threshold_ms": 1300.0,
+      "rtf_threshold": 0.45
+    },
+    {
+      "id": "acceptance-200ms-target",
+      "name": "目标时延对标样例",
+      "category": "acceptance",
+      "tags": [
+        "acceptance",
+        "target-200ms"
+      ],
+      "sentence": "短句目标时延验证。",
+      "repeat": 5,
+      "warmup": 1,
+      "latency_threshold_ms": 200.0,
+      "rtf_threshold": 0.10,
+      "notes": "当前 CPU 基线预计不会通过，该用例用于对标最终 NPU 验收目标。"
+    }
+  ]
+}
