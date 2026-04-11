@@ -1,0 +1,16 @@
+# Python runtime artifacts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local-only configuration
+config/local/
+
+# Generated build, packaging, and delivery artifacts
+artifacts/
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store
