@@ -12,7 +12,7 @@ from typing import Sequence
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_ROOT = WORKSPACE_ROOT / "artifacts" / "releases"
-DEFAULT_PACKAGE_NAME = "rk3588-tts-delivery"
+DEFAULT_PACKAGE_NAME = "rk3588-asr-tts-delivery"
 DEFAULT_RELEASE_NOTES_RELATIVE_PATH = "docs\\delivery\\发布说明模板.md"
 BASE_ITEMS = (
     ".gitignore",
@@ -23,8 +23,8 @@ BASE_ITEMS = (
     "docs",
     "scripts",
 )
-RUNTIME_BUNDLE_RELATIVE_PATH = "artifacts\\runtime\\paddlespeech_tts_armlinux_runtime.tar.gz"
-EVIDENCE_RELATIVE_PATH = "artifacts\\runtime\\paddlespeech_tts_armlinux_runtime\\output"
+RUNTIME_BUNDLE_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime.tar.gz"
+EVIDENCE_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime\\output"
 INVALID_PATH_SEGMENT_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 WHITESPACE_PATTERN = re.compile(r"\s+")
 
@@ -291,13 +291,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--include-runtime-bundle",
         "--IncludeRuntimeBundle",
         action="store_true",
-        help="Include artifacts/runtime/paddlespeech_tts_armlinux_runtime.tar.gz",
+        help="Include artifacts/runtime/sherpa_onnx_rk3588_runtime.tar.gz",
     )
     parser.add_argument(
         "--include-evidence",
         "--IncludeEvidence",
         action="store_true",
-        help="Include artifacts/runtime/paddlespeech_tts_armlinux_runtime/output",
+        help="Include artifacts/runtime/sherpa_onnx_rk3588_runtime/output",
     )
     return parser.parse_args(argv)
 

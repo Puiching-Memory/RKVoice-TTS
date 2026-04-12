@@ -1,12 +1,14 @@
-# RK3588 离线 TTS 交付工程
+# RK3588 离线 ASR + TTS 交付工程
 
-本项目用于在 RK3588 / A588 开发板上完成离线 TTS 的工程化交付，当前包含：
+本项目用于在 RK3588 / A588 开发板上完成离线语音能力的工程化交付，当前默认主线基于 sherpa-onnx，包含：
 
-- 板卡网络初始化脚本
-- PaddleSpeech ARM Linux 运行包构建与上板脚本
-- 单元测试入口与历史测试产物目录
+- sherpa-onnx RK3588 运行包下载、组装、上板与冒烟
+- ASR 的 CPU/ONNX 基线与 RKNN/NPU 验证路径
+- 中文 TTS 的 CPU/ONNX 基线运行包
+- 板卡网络初始化脚本、发布打包脚本与单元测试入口
 - 指标、差距、部署说明与选型报告
-- 本地构建产物与板端冒烟回传结果
+
+历史 PaddleSpeech TTSArmLinux 交付链仍保留在 scripts/delivery/paddlespeech_tts_armlinux/，作为中文 CPU 基线与对照路径。
 
 ## 目录结构
 
@@ -27,7 +29,9 @@
 │  ├─ board/
 │  ├─ delivery/
 │  │  ├─ paddlespeech_tts_armlinux/
+│  │  ├─ sherpa_onnx_rk3588/
 │  │  └─ templates/
+│  ├─ testing/
 │  └─ release/
 └─ artifacts/
    ├─ cache/
@@ -41,8 +45,9 @@
 
 - 推荐通过 uv run 执行 Python 入口；对于包化的 delivery CLI，推荐使用 python -m 形式。
 - 实际实现位于 scripts/board、scripts/delivery 和 scripts/release。
-- scripts/delivery/paddlespeech_tts_armlinux/ 按 source bundle、runtime build、upload/deploy、cli 拆分了 delivery 实现。
-- scripts/delivery/templates/ 保存运行包、SDK、CMake 与 shell 生成模板，避免在 Python 入口中内嵌大量原生源码。
+- 默认交付主线位于 scripts/delivery/sherpa_onnx_rk3588/，按 source bundle、runtime assemble、upload/deploy、cli 拆分实现。
+- scripts/delivery/paddlespeech_tts_armlinux/ 保留为历史 CPU 基线，不再是默认入口。
+- scripts/delivery/templates/ 保存运行包 shell 模板，避免在 Python 入口中内嵌大段板端脚本。
 
 ## Python 环境
 
@@ -58,9 +63,11 @@ uv sync
 常用命令：
 
 ```powershell
-uv run python -m scripts.delivery.paddlespeech_tts_armlinux build
-uv run python -m scripts.delivery.paddlespeech_tts_armlinux upload --source-ip 169.254.46.223
+uv run python -m scripts.delivery.sherpa_onnx_rk3588 download
+uv run python -m scripts.delivery.sherpa_onnx_rk3588 build
+uv run python -m scripts.delivery.sherpa_onnx_rk3588 all --source-ip 169.254.46.223
 uv run python -m tests
+uv run python -m scripts.testing.rkvoice_report
 uv run python scripts/board/set_board_static_ipv4.py
 uv run python scripts/release/package_release.py --version v1.0.0 --include-runtime-bundle --include-evidence
 ```
@@ -74,6 +81,33 @@ uv run python scripts/release/package_release.py --version v1.0.0 --include-runt
 uv run python -m tests
 uv run python -m unittest tests.test_package_release
 ```
+
+## 综合测试报告
+
+- 统一报告入口会执行 unittest discovery，并汇总当前运行包 output/ 下的 smoke / profile 证据、测试计划 JSON 和 docs/requirements/项目指标.md，输出 HTML 与 JSON 报告。
+- 默认报告目录形如 artifacts/test-runs/rkvoice-report-时间戳/，其中包含：
+
+```text
+index.html
+report.json
+assets/
+```
+
+- 默认命令：
+
+```powershell
+uv run python -m scripts.testing.rkvoice_report
+```
+
+- 常用参数：
+
+```powershell
+uv run python -m scripts.testing.rkvoice_report --skip-unittests
+uv run python -m scripts.testing.rkvoice_report --runtime-dir artifacts/runtime/sherpa_onnx_rk3588_runtime
+uv run python -m scripts.testing.rkvoice_report --fail-on-requirement-failures
+```
+
+- 报告中的 flame-style heatmap 基于 rknn_profile.log 或 profile-samples.csv 的采样数据绘制，用于工程排查与趋势观察，不等同于 perf 调用栈火焰图。
 
 ## 文档位置
 
@@ -93,6 +127,7 @@ uv run python -m unittest tests.test_package_release
 - 本地敏感连接信息放在 config/local/
 - 示例模板放在 config/examples/
 - 不建议把板卡密码、源地址等信息写入可交付文档
+- 新主线默认使用 RKVOICE_* 环境变量；为兼容历史流程，delivery CLI 仍接受旧的 TTS_* 环境变量
 
 推荐配置文件：
 
@@ -116,25 +151,32 @@ uv run python -m unittest tests.test_package_release
 
 当前默认运行包目录：
 
-- artifacts/runtime/paddlespeech_tts_armlinux_runtime/
+- artifacts/runtime/sherpa_onnx_rk3588_runtime/
 
-当前运行包内的二进制 SDK 形态：
+当前默认运行包形态：
 
-- bin/rkvoice_tts_demo
-- bin/paddlespeech_tts_demo
-- lib/librkvoice_tts.so
-- lib/librkvoice_tts.a
-- include/rkvoice_tts_api.h
-- examples/c_api_demo.c
+- bin/sherpa-onnx-offline
+- bin/sherpa-onnx-offline-tts
+- lib/libsherpa-onnx-c-api.so
+- models/asr/cpu/sense-voice/
+- models/asr/rknn/sense-voice-rk3588-20s/
+- models/tts/vits-icefall-zh-aishell3/
+- run_asr.sh
+- run_tts.sh
+- smoketest.sh
 
 当前后端支持状态：
 
-- CPU 后端：可用
-- RKNN 后端：预留接口，当前运行包尚未编译进 NPU 推理实现
+- ASR CPU/ONNX：可用
+- ASR RKNN/NPU：可用，要求板端提供兼容版本的 librknnrt.so
+- TTS CPU/ONNX：可用
+- TTS RKNN/NPU：不是当前默认交付目标
+
+默认 TTS 模型仅作为技术基线，商业交付前应再次核验上游模型与数据许可。
 
 当前默认冒烟结果目录：
 
-- artifacts/runtime/paddlespeech_tts_armlinux_runtime/output/
+- artifacts/runtime/sherpa_onnx_rk3588_runtime/output/
 
 当前默认发布目录：
 
@@ -147,6 +189,12 @@ uv run python -m unittest tests.test_package_release
 当前默认测试报告目录：
 
 - artifacts/test-runs/
+
+当前默认综合报告目录形态：
+
+- artifacts/test-runs/rkvoice-report-时间戳/index.html
+- artifacts/test-runs/rkvoice-report-时间戳/report.json
+- artifacts/test-runs/rkvoice-report-时间戳/assets/
 
 发布脚本会在发布包根目录额外生成：
 

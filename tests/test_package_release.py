@@ -35,7 +35,7 @@ class PackageReleaseTests(WorkspaceTestCase):
             result = build_release(
                 workspace_root=workspace_root,
                 output_root=output_root,
-                package_name="rk3588-tts-delivery",
+                package_name="rk3588-asr-tts-delivery",
                 version="v1.0.0",
             )
 
@@ -46,7 +46,7 @@ class PackageReleaseTests(WorkspaceTestCase):
 
             release_notes = (result.release_dir / "RELEASE_NOTES.md").read_text(encoding="utf-8")
             manifest = result.manifest_path.read_text(encoding="utf-8")
-            self.assertIn("包=rk3588-tts-delivery", release_notes)
+            self.assertIn("包=rk3588-asr-tts-delivery", release_notes)
             self.assertIn("版本=v1.0.0", release_notes)
             self.assertIn("Version=v1.0.0", manifest)
             self.assertIn("IncludeRuntimeBundle=False", manifest)
@@ -63,11 +63,11 @@ class PackageReleaseTests(WorkspaceTestCase):
             output_root = temp_dir / "out"
             self._create_workspace(workspace_root)
             self._create_file(
-                workspace_root / "artifacts" / "runtime" / "paddlespeech_tts_armlinux_runtime.tar.gz",
+                workspace_root / "artifacts" / "runtime" / "sherpa_onnx_rk3588_runtime.tar.gz",
                 "runtime bundle\n",
             )
             self._create_file(
-                workspace_root / "artifacts" / "runtime" / "paddlespeech_tts_armlinux_runtime" / "output" / "smoke_test.log",
+                workspace_root / "artifacts" / "runtime" / "sherpa_onnx_rk3588_runtime" / "output" / "smoke_test.log",
                 "ok\n",
             )
             self._create_file(
@@ -90,7 +90,7 @@ class PackageReleaseTests(WorkspaceTestCase):
                     result.release_dir
                     / "artifacts"
                     / "runtime"
-                    / "paddlespeech_tts_armlinux_runtime.tar.gz"
+                    / "sherpa_onnx_rk3588_runtime.tar.gz"
                 ).exists()
             )
             self.assertTrue(
@@ -98,7 +98,7 @@ class PackageReleaseTests(WorkspaceTestCase):
                     result.release_dir
                     / "artifacts"
                     / "runtime"
-                    / "paddlespeech_tts_armlinux_runtime"
+                    / "sherpa_onnx_rk3588_runtime"
                     / "output"
                     / "smoke_test.log"
                 ).exists()
