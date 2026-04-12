@@ -4,7 +4,7 @@
 
 - 板卡网络初始化脚本
 - PaddleSpeech ARM Linux 运行包构建与上板脚本
-- 批量测试计划、结果归档与可视化报告脚本
+- 单元测试入口与历史测试产物目录
 - 指标、差距、部署说明与选型报告
 - 本地构建产物与板端冒烟回传结果
 
@@ -26,7 +26,8 @@
 ├─ scripts/
 │  ├─ board/
 │  ├─ delivery/
-│  ├─ testing/
+│  │  ├─ paddlespeech_tts_armlinux/
+│  │  └─ templates/
 │  └─ release/
 └─ artifacts/
    ├─ cache/
@@ -38,8 +39,10 @@
 
 ## 入口说明
 
-- 推荐通过 uv run 直接执行 scripts 目录下的 Python 入口。
-- 实际实现位于 scripts/board、scripts/delivery、scripts/testing 和 scripts/release。
+- 推荐通过 uv run 执行 Python 入口；对于包化的 delivery CLI，推荐使用 python -m 形式。
+- 实际实现位于 scripts/board、scripts/delivery 和 scripts/release。
+- scripts/delivery/paddlespeech_tts_armlinux/ 按 source bundle、runtime build、upload/deploy、cli 拆分了 delivery 实现。
+- scripts/delivery/templates/ 保存运行包、SDK、CMake 与 shell 生成模板，避免在 Python 入口中内嵌大量原生源码。
 
 ## Python 环境
 
@@ -50,16 +53,26 @@
 uv sync
 ```
 
-- 后续直接执行 uv run python scripts/... 下的实现脚本，无需手动激活 .venv。
+- 后续直接执行 uv run python scripts/... 下的实现脚本，或通过 uv run python -m 调用包入口，无需手动激活 .venv。
 
 常用命令：
 
 ```powershell
-uv run python scripts/delivery/prepare_paddlespeech_tts_armlinux.py build
-uv run python scripts/delivery/prepare_paddlespeech_tts_armlinux.py upload --source-ip 169.254.46.223
-uv run python scripts/testing/run_tts_test_suite.py run --category latency
+uv run python -m scripts.delivery.paddlespeech_tts_armlinux build
+uv run python -m scripts.delivery.paddlespeech_tts_armlinux upload --source-ip 169.254.46.223
+uv run python -m tests
 uv run python scripts/board/set_board_static_ipv4.py
-./scripts/release/package_release.ps1 -Version v1.0.0 -IncludeRuntimeBundle -IncludeEvidence
+uv run python scripts/release/package_release.py --version v1.0.0 --include-runtime-bundle --include-evidence
+```
+
+## 单元测试
+
+- tests/ 下统一维护 scripts/ 目录 Python 入口的单元测试。
+- 全量单测统一通过包入口执行，避免每个测试文件重复维护独立启动样板。
+
+```powershell
+uv run python -m tests
+uv run python -m unittest tests.test_package_release
 ```
 
 ## 文档位置
@@ -104,6 +117,20 @@ uv run python scripts/board/set_board_static_ipv4.py
 当前默认运行包目录：
 
 - artifacts/runtime/paddlespeech_tts_armlinux_runtime/
+
+当前运行包内的二进制 SDK 形态：
+
+- bin/rkvoice_tts_demo
+- bin/paddlespeech_tts_demo
+- lib/librkvoice_tts.so
+- lib/librkvoice_tts.a
+- include/rkvoice_tts_api.h
+- examples/c_api_demo.c
+
+当前后端支持状态：
+
+- CPU 后端：可用
+- RKNN 后端：预留接口，当前运行包尚未编译进 NPU 推理实现
 
 当前默认冒烟结果目录：
 
