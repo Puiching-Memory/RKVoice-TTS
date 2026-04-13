@@ -24,10 +24,12 @@ SHERPA_ONNX_RELEASE_TAG = "v1.12.37"
 SHERPA_ONNX_RUNTIME_ASSET_VERSION = "v1.12.36"
 SENSE_VOICE_VERSION = "2025-09-09"
 SENSE_VOICE_RKNN_VERSION = "2025-09-09"
+STREAMING_ZIPFORMER_VERSION = "2023-12-12"
 
 PREBUILT_RUNTIME_DIR_NAME = "sherpa-onnx-runtime"
 CPU_ASR_DIR_NAME = "sense-voice"
 RKNN_ASR_DIR_NAME = "sense-voice-rk3588-20s"
+STREAMING_ASR_DIR_NAME = "streaming-zipformer-multi-zh-hans"
 TTS_DIR_NAME = "vits-icefall-zh-aishell3"
 
 
@@ -195,6 +197,16 @@ ARTIFACTS: tuple[Artifact, ...] = (
         target_subdir="models/tts",
         strip_top_level=True,
         extracted_dir_name=TTS_DIR_NAME,
+    ),
+    Artifact(
+        name=f"sherpa-onnx-streaming-zipformer-multi-zh-hans-{STREAMING_ZIPFORMER_VERSION}.tar.bz2",
+        url=(
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
+            f"sherpa-onnx-streaming-zipformer-multi-zh-hans-{STREAMING_ZIPFORMER_VERSION}.tar.bz2"
+        ),
+        target_subdir="models/asr/streaming",
+        strip_top_level=True,
+        extracted_dir_name=STREAMING_ASR_DIR_NAME,
     ),
 )
 

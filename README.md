@@ -68,8 +68,11 @@ uv run python -m scripts.delivery.sherpa_onnx_rk3588 build
 uv run python -m scripts.delivery.sherpa_onnx_rk3588 all --source-ip 169.254.46.223
 uv run python -m tests
 uv run python -m scripts.testing.rkvoice_report
+uv run python scripts/board/prepare_rknn_debug_bridge.py
+uv run python scripts/testing/rknn_toolkit2_profile_in_docker.py --prepare-board-debug-bridge
 uv run python scripts/board/set_board_static_ipv4.py
 uv run python scripts/release/package_release.py --version v1.0.0 --include-runtime-bundle --include-evidence
+uv run python scripts/release/package_release_in_docker.py --version v1.0.0 --include-runtime-bundle --include-evidence
 ```
 
 ## 单元测试
@@ -107,7 +110,8 @@ uv run python -m scripts.testing.rkvoice_report --runtime-dir artifacts/runtime/
 uv run python -m scripts.testing.rkvoice_report --fail-on-requirement-failures
 ```
 
-- 报告中的 flame-style heatmap 基于 rknn_profile.log 或 profile-samples.csv 的采样数据绘制，用于工程排查与趋势观察，不等同于 perf 调用栈火焰图。
+- 报告会优先解析 output/ 下的 rknn_eval_perf.txt、rknn_query_perf_detail.txt、rknn_perf_run.json、rknn_memory_profile.txt 等官方 RKNN profiler 证据；若缺失，再回退到 rknn_runtime.log 与 rknpu/load、profile-samples.csv 生成的时序热力图。
+- 热力图仅用于观察运行期负载与进程采样趋势，不等同于 perf 调用栈火焰图。
 
 ## 文档位置
 

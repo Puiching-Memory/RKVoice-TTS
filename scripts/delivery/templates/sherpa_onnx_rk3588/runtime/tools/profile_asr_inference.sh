@@ -4,7 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 RUNTIME_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOAD_FILE="/sys/kernel/debug/rknpu/load"
-PROFILE_LOG="${RKVOICE_RKNN_PROFILE_LOG:-$RUNTIME_DIR/output/rknn_profile.log}"
+LEGACY_PROFILE_LOG="${RKVOICE_RKNN_PROFILE_LOG:-$RUNTIME_DIR/output/rknn_profile.log}"
+RKNPU_LOAD_LOG="${RKVOICE_RKNPU_LOAD_LOG:-$RUNTIME_DIR/output/rknpu_load.log}"
+RKNN_RUNTIME_LOG="${RKVOICE_RKNN_RUNTIME_LOG:-$RUNTIME_DIR/output/rknn_runtime.log}"
 INTERVAL_SECONDS="${RKVOICE_RKNN_PROFILE_INTERVAL:-0.1}"
 
 mkdir -p "$RUNTIME_DIR/output"
@@ -22,12 +24,24 @@ monitor_load() {
     done
 }
 
-monitor_load > "$PROFILE_LOG" &
+monitor_load > "$RKNPU_LOAD_LOG" &
 monitor_pid="$!"
 trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
 
-RKVOICE_ASR_PROVIDER=rknn "$RUNTIME_DIR/run_asr.sh" "$@"
+status=0
+if RKNN_LOG_LEVEL="${RKNN_LOG_LEVEL:-4}" RKVOICE_ASR_PROVIDER=rknn "$RUNTIME_DIR/run_asr.sh" "$@" 2>&1 | tee "$RKNN_RUNTIME_LOG"; then
+    status=0
+else
+    status=$?
+fi
 
 kill "$monitor_pid" 2>/dev/null || true
 trap - EXIT
-echo "RKNN load profile saved to $PROFILE_LOG"
+if [ "$RKNPU_LOAD_LOG" != "$LEGACY_PROFILE_LOG" ]; then
+    cp "$RKNPU_LOAD_LOG" "$LEGACY_PROFILE_LOG"
+fi
+
+echo "RKNN runtime log saved to $RKNN_RUNTIME_LOG"
+echo "RKNPU load profile saved to $RKNPU_LOAD_LOG"
+echo "Legacy compatibility copy saved to $LEGACY_PROFILE_LOG"
+exit "$status"

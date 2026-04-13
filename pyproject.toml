@@ -5,6 +5,7 @@ description = "RK3588 offline ASR and TTS delivery automation workspace"
 readme = "README.md"
 requires-python = ">=3.10,<3.15"
 dependencies = [
+    "jinja2>=3.1,<4",
     "paramiko>=4.0,<5.0",
 ]
 

@@ -4,7 +4,7 @@ import json
 import wave
 from pathlib import Path
 
-from scripts.testing.rkvoice_report import build_report
+from scripts.testing.rkvoice_report import build_report, parse_rknn_memory_profile, parse_rknn_perf_text
 from tests.test_support import WorkspaceTestCase
 
 
@@ -89,25 +89,34 @@ class RKVoiceReportTests(WorkspaceTestCase):
         )
         self._create_file(
             runtime_dir / "run_asr.sh",
-            "#!/bin/bash\nexec ./bin/sherpa-onnx-offline --provider=rknn ./models/asr/rknn/sense-voice-rk3588-20s/test_wavs/zh.wav\n",
+            '#!/bin/bash\nASR_MODE="${RKVOICE_ASR_MODE:-streaming}"\nexec ./bin/sherpa-onnx --encoder=./models/asr/streaming/streaming-zipformer-multi-zh-hans/encoder-epoch-20-avg-1-chunk-16-left-128.int8.onnx\n',
         )
+        self._create_file(runtime_dir / "bin" / "sherpa-onnx", "binary\n")
         self._create_file(runtime_dir / "bin" / "sherpa-onnx-offline", "binary\n")
         self._create_file(runtime_dir / "bin" / "sherpa-onnx-offline-tts", "binary\n")
         self._create_binary(runtime_dir / "models" / "tts" / "vits-icefall-zh-aishell3" / "model.onnx", 1024)
         self._create_binary(runtime_dir / "models" / "asr" / "cpu" / "sense-voice" / "model.int8.onnx", 1024)
         self._create_binary(runtime_dir / "models" / "asr" / "rknn" / "sense-voice-rk3588-20s" / "model.rknn", 1024)
+        self._create_binary(runtime_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "encoder-epoch-20-avg-1-chunk-16-left-128.int8.onnx", 67 * 1024 * 1024)
+        self._create_binary(runtime_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "decoder-epoch-20-avg-1-chunk-16-left-128.onnx", 5 * 1024 * 1024)
+        self._create_binary(runtime_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "joiner-epoch-20-avg-1-chunk-16-left-128.int8.onnx", 1024 * 1024)
+        self._create_file(runtime_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "tokens.txt", "tokens\n")
         self._create_file(
             output_dir / "smoke_test_summary.log",
-            """[0/3] Board capability snapshot
-[1/3] CPU TTS smoke test
+            """[0/4] Board capability snapshot
+[1/4] CPU TTS smoke test
 Elapsed seconds: 0.353 s
 Audio duration: 3.030 s
 Real-time factor (RTF): 0.353/3.030 = 0.117
 The text is: 你好，欢迎使用离线语音合成服务。. Speaker ID: 66
-[2/3] CPU ASR smoke test
+[2/4] Streaming ASR smoke test
+Elapsed seconds: 0.125 s
+Real time factor (RTF): 0.125 / 5.592 = 0.022
+{"text":"开放时间早上九点至下午五点"}
+[3/4] CPU offline ASR smoke test
 Elapsed seconds: 0.343 s
 Real time factor (RTF): 0.343 / 5.592 = 0.061
-[3/3] RKNN ASR smoke test
+[4/4] RKNN ASR smoke test
 Elapsed seconds: 0.855 s
 Real time factor (RTF): 0.855 / 5.592 = 0.153
 {"text":"开放时间早上九点至下午五点"}
@@ -119,6 +128,49 @@ Real time factor (RTF): 0.855 / 5.592 = 0.153
 NPU load:  Core0: 52%, Core1:  0%, Core2:  0%,
 === 2026-04-12 18:44:15 ===
 NPU load:  Core0: 48%, Core1:  0%, Core2:  0%,
+""",
+        )
+        self._create_file(
+            output_dir / "rknn_eval_perf.txt",
+            """===================================================================================================================
+                            Performance
+===================================================================================================================
+ID   OpType           DataType Target InputShape                                   OutputShape            DDR Cycles     NPU Cycles     Total Cycles   Time(us)       MacUsage(%)    WorkLoad(0/1/2)-ImproveTherical        Task Number    Lut Number     RW(KB)         FullName
+1    InputOperator    UINT8    CPU    \\                                            (1,3,224,224)          0              0              0              7              \\              0.0%/0.0%/0.0% - Up:0.0%               0              0              147.00         InputOperator:data
+2    ConvRelu         UINT8    NPU    (1,3,224,224),(32,3,3,3),(32)                (1,32,112,112)         94150          10584          94150          428            2.47           100.0%/0.0%/0.0% - Up:0.0%             3              0              543.75         conv1
+
+Total Operator Elapsed Time(us): 14147
+Total Memory RW Amount(MB): 0
+Operator Time-Consuming Ranking:
+OpType           Call Number     CPU Time(us)    NPU Time(us)    Total Time(us)    Time Ratio(%)
+ConvRelu         36              0               9338            9338              66.0
+InputOperator    1               7               0               7                 0.04
+===================================================================================================================
+""",
+        )
+        self._create_file(
+            output_dir / "rknn_perf_run.json",
+            json.dumps({"run_duration_us": 12345}, ensure_ascii=False),
+        )
+        self._create_file(
+            output_dir / "rknn_memory_profile.txt",
+            """======================================================
+            Memory Profile Info Dump
+======================================================
+NPU model memory detail(bytes):
+    Total Weight Memory: 3.53 MiB
+    Total Internal Tensor Memory: 1.67 MiB
+    Total Memory: 5.66 MiB
+
+INFO: When evaluating memory usage, we need consider
+the size of model, current model size is: 4.08 MiB
+======================================================
+""",
+        )
+        self._create_file(
+            output_dir / "rknn_runtime.log",
+            """I RKNN: layer conv1 MACs utilization 72% bandwidth occupation 31%
+I RKNN: layer conv2 MACs utilization 61% bandwidth occupation 28%
 """,
         )
         self._create_file(
@@ -163,19 +215,96 @@ class DemoTests(unittest.TestCase):
             self.assertTrue(result.html_path.exists())
             self.assertTrue(result.json_path.exists())
             self.assertTrue((result.report_dir / "assets" / "smoke_test_tts.wav").exists())
-            self.assertTrue((result.report_dir / "assets" / "asr-rknn-heatmap.svg").exists())
+            self.assertTrue((result.report_dir / "assets" / "asr-rknpu-load-heatmap.svg").exists())
+            self.assertTrue((result.report_dir / "assets" / "report-static" / "vendor" / "tabler.min.css").exists())
+            self.assertTrue((result.report_dir / "assets" / "report-static" / "rkvoice-report.css").exists())
 
             payload = json.loads(result.json_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["unit_tests"]["total"], 2)
             self.assertEqual(payload["unit_tests"]["passed"], 2)
             self.assertEqual(payload["summary"]["verdict"], "fail")
+            self.assertEqual(payload["observed"]["rknn_profile_source"], "eval_perf")
+            self.assertEqual(payload["evidence"]["rknn_perf"]["operator_count"], 2)
+            self.assertEqual(payload["evidence"]["rknn_perf"]["ranking"][0]["op_type"], "ConvRelu")
+            self.assertAlmostEqual(payload["observed"]["rknn_run_duration_ms"], 12.345, places=3)
+            self.assertAlmostEqual(payload["observed"]["rknn_total_memory_mib"], 5.66, places=2)
 
             requirements = {item["requirement"]: item for item in payload["requirements"]["items"]}
             self.assertEqual(requirements["NPU 加速下，单句中文语音合成端到端延迟 ≤ 150 ms。"]["status"], "fail")
-            self.assertEqual(requirements["支持流式识别。"]["status"], "fail")
+            self.assertEqual(requirements["支持流式识别。"]["status"], "pass")
             self.assertEqual(requirements["系统整体全程离线独立工作，无任何外部网络依赖。"]["status"], "pass")
             self.assertEqual(requirements["通信指令、数字、字母发音准确无歧义。"]["status"], "partial")
 
             html_report = result.html_path.read_text(encoding="utf-8")
             self.assertIn("audio controls", html_report)
-            self.assertIn("ASR RKNN Flame-Style Heatmap", html_report)
+            self.assertIn("assets/report-static/vendor/tabler.min.css", html_report)
+            self.assertIn("报告导航", html_report)
+            self.assertIn("运行画像", html_report)
+            self.assertIn("RKNN 官方 Profiling", html_report)
+            self.assertIn("ASR RKNN NPU Load Heatmap", html_report)
+            self.assertIn("Toolkit2 eval_perf()", html_report)
+
+    def test_parse_rknn_perf_text_supports_toolkit2_232_format(self) -> None:
+        with self.temp_dir("rkvoice_perf_text_") as temp_dir:
+            perf_path = temp_dir / "rknn_eval_perf.txt"
+            memory_path = temp_dir / "rknn_memory_profile.txt"
+            self._create_file(
+                perf_path,
+                """CPU Current Frequency List:
+    - 1800000
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                          Network Layer Information Table
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ID   OpType             DataType Target InputShape                               OutputShape            Cycles(DDR/NPU/Total)    Time(us)     MacUsage(%)          WorkLoad(0/1/2)      RW(KB)       FullName
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1    InputOperator      FLOAT16  CPU    \\                                       (1,333,560)            0/0/0                    5                                 0.0%/0.0%/0.0%       0            InputOperator:x
+2    Conv               FLOAT16  NPU    (1,560,1,337),(1536,560,1,1),(1536)      (1,1536,1,337)         116785/608256/608256     733          77.24/0.00/0.00      100.0%/0.0%/0.0%     2054         Conv:/encoder/layer0
+3    OutputOperator     FLOAT16  CPU    (1,337,25055)                            \\                      0/0/0                    557                               0.0%/0.0%/0.0%       16491        OutputOperator:logits
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total Operator Elapsed Per Frame Time(us): 785166
+Total Memory Read/Write Per Frame Size(KB): 1001510.19
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+                                 Operator Time Consuming Ranking Table
+---------------------------------------------------------------------------------------------------
+OpType             CallNumber   CPUTime(us)  GPUTime(us)  NPUTime(us)  TotalTime(us)  TimeRatio(%)
+---------------------------------------------------------------------------------------------------
+Transpose          2            236967       0            220          237187         30.21
+Conv               141          0            0            64037        64037          8.16
+---------------------------------------------------------------------------------------------------
+Total                           237546       0            547620       785166
+---------------------------------------------------------------------------------------------------
+""",
+            )
+            self._create_file(
+                memory_path,
+                """======================================================
+            Memory Profile Info Dump
+======================================================
+NPU model memory detail(bytes):
+    Weight Memory: 443.51 MiB
+    Internal Tensor Memory: 49.13 MiB
+    Other Memory: 18.72 MiB
+    Total Memory: 511.36 MiB
+
+INFO: When evaluating memory usage, we need consider
+the size of model, current model size is: 463.47 MiB
+======================================================
+""",
+            )
+
+            perf = parse_rknn_perf_text(perf_path)
+            memory = parse_rknn_memory_profile(memory_path)
+
+            self.assertEqual(perf["source"], "eval_perf")
+            self.assertEqual(perf["operator_count"], 3)
+            self.assertEqual(perf["npu_operator_count"], 1)
+            self.assertAlmostEqual(perf["summary"]["total_operator_elapsed_time_us"], 785166.0, places=3)
+            self.assertAlmostEqual(perf["summary"]["total_memory_rw_mb"], 1001510.19 / 1024.0, places=3)
+            self.assertAlmostEqual(perf["summary"]["peak_mac_usage_percent"], 77.24, places=2)
+            self.assertEqual(perf["ranking"][0]["op_type"], "Transpose")
+            self.assertEqual(perf["ranking"][0]["gpu_time_us"], 0.0)
+            self.assertAlmostEqual(memory["total_weight_mib"], 443.51, places=2)
+            self.assertAlmostEqual(memory["total_internal_tensor_mib"], 49.13, places=2)
+            self.assertAlmostEqual(memory["total_memory_mib"], 511.36, places=2)
+            self.assertAlmostEqual(memory["model_size_mib"], 463.47, places=2)

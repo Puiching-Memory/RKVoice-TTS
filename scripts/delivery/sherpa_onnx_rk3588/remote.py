@@ -172,7 +172,21 @@ def deploy_runtime_bundle(
             local_wav_path = local_output_dir / "smoke_test_tts.wav"
             download_file(client, f"{remote_output_dir}/smoke_test_tts.wav", local_wav_path)
             download_file(client, f"{remote_output_dir}/smoke_test_summary.log", local_log_path)
-            for optional_name in ("board_profile_capabilities.txt", "rknn_profile.log"):
+            for optional_name in (
+                "board_profile_capabilities.txt",
+                "rknpu_load.log",
+                "rknn_profile.log",
+                "rknn_runtime.log",
+                "rknn_eval_perf.txt",
+                "rknn_query_perf_detail.txt",
+                "rknn_perf_detail.txt",
+                "rknn_perf_run.json",
+                "rknn_query_perf_run.txt",
+                "rknn_perf_run.txt",
+                "rknn_memory_profile.txt",
+                "rknn_eval_memory.txt",
+                "rknn_query_mem_size.json",
+            ):
                 try:
                     download_file(client, f"{remote_output_dir}/{optional_name}", local_output_dir / optional_name)
                 except OSError:

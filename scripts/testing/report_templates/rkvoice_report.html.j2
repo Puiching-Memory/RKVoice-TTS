@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RKVoice 综合测试报告</title>
+  <link rel="stylesheet" href="{{ static_assets.tabler_css }}" />
+  <link rel="stylesheet" href="{{ static_assets.report_css }}" />
+</head>
+<body>
+  <div class="page">
+    <div class="page-wrapper">
+      <div class="page-header d-print-none report-page-header">
+        <div class="container-xl">
+          <div class="card report-hero-card">
+            <div class="card-body p-4 p-lg-5">
+              <div class="row g-4 align-items-start">
+                <div class="col-lg-8">
+                  <div class="page-pretitle mb-2">RKVoice Integrated Report</div>
+                  <h1 class="report-hero-title">RK3588 离线 ASR + TTS 综合测试报告</h1>
+                  <p class="report-hero-intro">{{ hero_intro }}</p>
+                  <div class="report-chip-list">
+                    {% for chip in hero_chips %}
+                    <span class="badge badge-outline text-secondary report-chip">{{ chip.label }} {{ chip.value }}</span>
+                    {% endfor %}
+                  </div>
+                  <div class="report-anchor-list">
+                    {% for link in navigation_links %}
+                    <a class="btn btn-outline-secondary btn-sm report-anchor-btn" href="#{{ link.section_id }}">{{ link.label }}</a>
+                    {% endfor %}
+                  </div>
+                </div>
+                <div class="col-lg-4">
+                  <div class="card report-verdict-card status-{{ verdict_class }}">
+                    <div class="card-body">
+                      <div class="page-pretitle text-reset opacity-75 mb-2">综合判定</div>
+                      <div class="report-verdict-value">{{ summary_label }}</div>
+                      <p class="report-verdict-message">{{ summary.message }}</p>
+                    </div>
+                  </div>
+                  <div class="row row-cards mt-3">
+                    {% for stat in hero_stats %}
+                    <div class="col-6">
+                      <div class="card report-mini-card">
+                        <div class="card-body">
+                          <div class="page-pretitle mb-1">{{ stat.label }}</div>
+                          <div class="report-mini-value">{{ stat.value }}</div>
+                        </div>
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-body">
+        <div class="container-xl">
+          <div class="row row-cards">
+            <div class="col-xl-8">
+              <section class="report-section" id="overview">
+                <div class="report-section-head">
+                  <div>
+                    <div class="page-pretitle">Overview</div>
+                    <h2 class="report-section-title">执行概览</h2>
+                    <p class="report-section-note">先看关键数字，再看矩阵和 profiler。导出页不再把所有表格堆在同一层，而是把当前可交付结论、缺口和板端状态分开呈现。</p>
+                  </div>
+                  <span class="badge bg-teal-lt text-teal-fg report-section-badge">Report Navigation Ready</span>
+                </div>
+                <div class="row row-cards">
+                  {% for card in cards %}
+                  <div class="col-sm-6 col-xl-4">
+                    <div class="card report-metric-card">
+                      <div class="report-metric-accent" style="background: {{ card.accent }}"></div>
+                      <div class="card-body">
+                        <div class="page-pretitle mb-2">{{ card.title }}</div>
+                        <div class="report-metric-value">{{ card.value }}</div>
+                        <div class="text-secondary report-metric-subtitle">{{ card.subtitle }}</div>
+                      </div>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+                <div class="card report-soft-card">
+                  <div class="card-header">
+                    <div>
+                      <h3 class="card-title">指标总览</h3>
+                      <div class="text-secondary small">报告按 docs/requirements/项目指标.md 逐条生成状态。未通过说明当前证据已证明不达标，证据不足说明需要追加专门测试。</div>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div class="report-status-grid">
+                      {% for tile in status_tiles %}
+                      <div class="report-status-tile status-{{ tile.status }}">
+                        <span>{{ tile.label }}</span>
+                        <strong>{{ tile.count }}</strong>
+                      </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="report-section" id="profiling">
+                <div class="card report-soft-card report-focus-card">
+                  <div class="card-header report-card-header-split">
+                    <div>
+                      <div class="page-pretitle">Profiler</div>
+                      <h3 class="card-title">RKNN 官方 Profiling</h3>
+                      <div class="text-secondary small">优先展示 Toolkit2 eval_perf() / RKNN_QUERY_PERF_DETAIL / PERF_RUN / MEM_SIZE 的结构化证据；RKNN_LOG_LEVEL=4 作为运行时层日志补充，rknpu/load 热力图仅用于时序负载观察。</div>
+                    </div>
+                    <span class="badge bg-teal-lt text-teal-fg report-section-badge">{{ rknn_profile_label }}</span>
+                  </div>
+                  <div class="card-body">
+                    <div class="report-summary-grid">
+                      {% for item in rknn_summary_boxes %}
+                      <div class="report-summary-box">
+                        <span>{{ item.label }}</span>
+                        <strong>{{ item.value }}</strong>
+                      </div>
+                      {% endfor %}
+                    </div>
+
+                    {% if top_layers %}
+                    <div class="report-subsection-title">热点层明细</div>
+                    <div class="table-responsive report-table-wrap">
+                      <table class="table table-vcenter card-table text-nowrap">
+                        <thead>
+                          <tr>
+                            <th>ID</th>
+                            <th>OpType</th>
+                            <th>Target</th>
+                            <th>Time</th>
+                            <th>NPU Cycles</th>
+                            <th>MacUsage</th>
+                            <th>WorkLoad</th>
+                            <th>Layer</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for layer in top_layers %}
+                          <tr>
+                            <td>{{ layer.id }}</td>
+                            <td>{{ layer.op_type }}</td>
+                            <td>{{ layer.target }}</td>
+                            <td>{{ layer.time }}</td>
+                            <td>{{ layer.npu_cycles }}</td>
+                            <td>{{ layer.mac_usage }}</td>
+                            <td>{{ layer.workload }}</td>
+                            <td class="text-wrap">{{ layer.layer }}</td>
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                    {% else %}
+                    <div class="report-empty-state mt-3">未发现可解析的 eval_perf / PERF_DETAIL 层级明细；报告会继续使用运行时层日志和 rknpu/load 采样。</div>
+                    {% endif %}
+
+                    {% if rknn_ranking_rows %}
+                    <div class="report-subsection-title">算子类型排行</div>
+                    <div class="table-responsive report-table-wrap">
+                      <table class="table table-vcenter card-table text-nowrap">
+                        <thead>
+                          <tr>
+                            <th>OpType</th>
+                            <th>Call Number</th>
+                            <th>Total Time</th>
+                            <th>Ratio</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for row in rknn_ranking_rows %}
+                          <tr>
+                            <td>{{ row.op_type }}</td>
+                            <td>{{ row.call_number }}</td>
+                            <td>{{ row.total_time }}</td>
+                            <td>{{ row.ratio }}</td>
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                    {% endif %}
+
+                    {% if runtime_log_preview %}
+                    <div class="report-subsection-title">RKNN_LOG_LEVEL=4 预览</div>
+                    <div class="report-log-preview"><pre>{% for line in runtime_log_preview %}{{ line }}{% if not loop.last %}
+{% endif %}{% endfor %}</pre></div>
+                    {% endif %}
+                  </div>
+                </div>
+              </section>
+
+              <section class="report-section" id="requirements">
+                <div class="report-section-head">
+                  <div>
+                    <div class="page-pretitle">Requirements</div>
+                    <h2 class="report-section-title">指标矩阵</h2>
+                    <p class="report-section-note">这里保留完整矩阵，方便审阅具体条目。表头固定，长表格横向可滚动，移动端也不会把内容压坏。</p>
+                  </div>
+                </div>
+                <div class="card report-soft-card">
+                  <div class="card-header">
+                    <div>
+                      <h3 class="card-title">Requirements Matrix</h3>
+                      <div class="text-secondary small">判定依据来自 {{ requirements_path }}</div>
+                    </div>
+                  </div>
+                  <div class="table-responsive report-table-wrap">
+                    <table class="table table-vcenter card-table">
+                      <thead>
+                        <tr>
+                          <th>章节</th>
+                          <th>子项</th>
+                          <th>要求</th>
+                          <th>状态</th>
+                          <th>观测</th>
+                          <th>判定依据</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for item in requirement_rows %}
+                        <tr class="report-status-row status-{{ item.status_class }}">
+                          <td>{{ item.section }}</td>
+                          <td>{{ item.subsection }}</td>
+                          <td class="text-wrap">{{ item.requirement }}</td>
+                          <td><span class="badge status-badge status-{{ item.status_class }}">{{ item.status_label }}</span></td>
+                          <td class="text-wrap">{{ item.observed }}</td>
+                          <td class="text-wrap">{{ item.rationale }}</td>
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+
+              <section class="report-section" id="evidence">
+                <div class="report-section-head">
+                  <div>
+                    <div class="page-pretitle">Evidence</div>
+                    <h2 class="report-section-title">证据媒体与时序采样</h2>
+                    <p class="report-section-note">音频预览和热力图用于补充说明运行期表现；真正的层级性能诊断请以上方 RKNN 官方 profiling 面板为准。</p>
+                  </div>
+                </div>
+                <div class="card report-soft-card">
+                  <div class="card-body">
+                    {% if media_cards %}
+                    <div class="row row-cards">
+                      {% for media in media_cards %}
+                      <div class="col-md-6">
+                        <div class="card report-media-card">
+                          <div class="card-body">
+                            <h3 class="card-title">{{ media.title }}</h3>
+                            {% if media.kind == 'audio' %}
+                            <audio controls preload="metadata" src="{{ media.src }}"></audio>
+                            {% else %}
+                            <img class="img-fluid rounded" alt="{{ media.alt }}" src="{{ media.src }}" />
+                            {% endif %}
+                            <div class="text-secondary small mt-3">{{ media.meta }}</div>
+                          </div>
+                        </div>
+                      </div>
+                      {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="report-empty-state">未发现可生成时序采样热力图的 profile 文件。</div>
+                    {% endif %}
+                  </div>
+                </div>
+              </section>
+
+              <section class="report-section" id="tests">
+                <div class="report-section-head">
+                  <div>
+                    <div class="page-pretitle">Tests</div>
+                    <h2 class="report-section-title">单元测试明细</h2>
+                    <p class="report-section-note">统一复用 tests 目录 discovery 入口。测试详情默认折叠，避免大段日志把主界面直接淹没。</p>
+                  </div>
+                </div>
+                <div class="card report-soft-card">
+                  <div class="table-responsive report-table-wrap">
+                    <table class="table table-vcenter card-table">
+                      <thead>
+                        <tr>
+                          <th>测试</th>
+                          <th>状态</th>
+                          <th>类型</th>
+                          <th>耗时</th>
+                          <th>详情</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% if unit_test_rows %}
+                          {% for case in unit_test_rows %}
+                          <tr class="report-status-row status-{{ case.status_class }}">
+                            <td class="text-wrap">{{ case.test_id }}</td>
+                            <td><span class="badge status-badge status-{{ case.status_class }}">{{ case.status_label }}</span></td>
+                            <td>{{ case.case_label }}</td>
+                            <td>{{ '%.3fs'|format(case.duration_s) }}</td>
+                            <td>
+                              {% if case.has_details %}
+                              <details class="report-case-details">
+                                <summary>展开日志</summary>
+                                <pre>{{ case.details }}</pre>
+                              </details>
+                              {% else %}
+                              <span class="text-secondary small">无附加输出</span>
+                              {% endif %}
+                            </td>
+                          </tr>
+                          {% endfor %}
+                        {% else %}
+                        <tr>
+                          <td colspan="5">本次未执行 unittest。</td>
+                        </tr>
+                        {% endif %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="col-xl-4" id="appendix">
+              <div class="report-sticky-stack">
+                <div class="card report-soft-card">
+                  <div class="card-header">
+                    <h3 class="card-title">报告导航</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="report-anchor-list report-anchor-list-rail">
+                      {% for link in navigation_links %}
+                      <a class="btn btn-outline-secondary btn-sm report-anchor-btn" href="#{{ link.section_id }}">{{ link.label }}</a>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card report-soft-card">
+                  <div class="card-header">
+                    <h3 class="card-title">运行画像</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="report-fact-list">
+                      {% for fact in runtime_facts %}
+                      <div class="report-fact-row">
+                        <div class="page-pretitle mb-1">{{ fact.label }}</div>
+                        <div class="report-fact-value">{{ fact.value }}</div>
+                        <div class="text-secondary small mt-1">{{ fact.detail }}</div>
+                      </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card report-soft-card">
+                  <div class="card-header">
+                    <h3 class="card-title">模型基线</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="report-fact-list">
+                      {% for fact in model_facts %}
+                      <div class="report-fact-row">
+                        <div class="page-pretitle mb-1">{{ fact.label }}</div>
+                        <div class="report-fact-value">{{ fact.value }}</div>
+                        <div class="text-secondary small mt-1">{{ fact.detail }}</div>
+                      </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card report-soft-card">
+                  <div class="card-header">
+                    <h3 class="card-title">冒烟摘要</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="report-story-grid">
+                      {% for story in smoke_briefs %}
+                      <article class="report-story-card">
+                        <div class="page-pretitle mb-2">{{ story.label }}</div>
+                        <div class="report-story-value">{{ story.value }}</div>
+                        <div class="text-secondary small mt-2">{{ story.meta }}</div>
+                        <div class="mt-3">{{ story.body }}</div>
+                      </article>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card report-soft-card">
+                  <div class="card-header">
+                    <div>
+                      <h3 class="card-title">计划与基线</h3>
+                      <div class="text-secondary small">这里展示测试计划模板中的覆盖面，帮助区分“有计划但未执行”和“根本没有验证入口”。</div>
+                    </div>
+                  </div>
+                  <div class="table-responsive report-table-wrap">
+                    <table class="table table-vcenter card-table">
+                      <thead>
+                        <tr>
+                          <th>类别</th>
+                          <th>用例数</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% if plan_rows %}
+                          {% for item in plan_rows %}
+                          <tr>
+                            <td>{{ item.category }}</td>
+                            <td>{{ item.count }}</td>
+                          </tr>
+                          {% endfor %}
+                        {% else %}
+                        <tr>
+                          <td colspan="2">未找到测试计划文件。</td>
+                        </tr>
+                        {% endif %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="card report-soft-card">
+                  <div class="card-header">
+                    <h3 class="card-title">原始产物</h3>
+                  </div>
+                  <div class="card-body">
+                    {% if asset_links %}
+                    <ul class="report-asset-list">
+                      {% for asset in asset_links %}
+                      <li><a href="{{ asset.path }}">{{ asset.name }}</a></li>
+                      {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="report-empty-state">未复制任何证据文件。</div>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="{{ static_assets.tabler_js }}" defer></script>
+</body>
+</html>
