@@ -216,8 +216,6 @@ class DemoTests(unittest.TestCase):
             self.assertTrue(result.json_path.exists())
             self.assertTrue((result.report_dir / "assets" / "smoke_test_tts.wav").exists())
             self.assertTrue((result.report_dir / "assets" / "asr-rknpu-load-heatmap.svg").exists())
-            self.assertTrue((result.report_dir / "assets" / "report-static" / "vendor" / "tabler.min.css").exists())
-            self.assertTrue((result.report_dir / "assets" / "report-static" / "rkvoice-report.css").exists())
 
             payload = json.loads(result.json_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["unit_tests"]["total"], 2)
@@ -237,10 +235,8 @@ class DemoTests(unittest.TestCase):
 
             html_report = result.html_path.read_text(encoding="utf-8")
             self.assertIn("audio controls", html_report)
-            self.assertIn("assets/report-static/vendor/tabler.min.css", html_report)
-            self.assertIn("报告导航", html_report)
-            self.assertIn("运行画像", html_report)
-            self.assertIn("RKNN 官方 Profiling", html_report)
+            self.assertIn("report-data", html_report)
+            self.assertIn("RKVoice", html_report)
             self.assertIn("ASR RKNN NPU Load Heatmap", html_report)
             self.assertIn("Toolkit2 eval_perf()", html_report)
 

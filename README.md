@@ -5,6 +5,7 @@
 - sherpa-onnx RK3588 运行包下载、组装、上板与冒烟
 - ASR 的 CPU/ONNX 基线与 RKNN/NPU 验证路径
 - 中文 TTS 的 CPU/ONNX 基线运行包
+- MeloTTS-RKNN2 的可选 Python + RKNN TTS 运行包
 - 板卡网络初始化脚本、发布打包脚本与单元测试入口
 - 指标、差距、部署说明与选型报告
 
@@ -29,6 +30,7 @@
 │  ├─ board/
 │  ├─ delivery/
 │  │  ├─ paddlespeech_tts_armlinux/
+│  │  ├─ melotts_rknn2/
 │  │  ├─ sherpa_onnx_rk3588/
 │  │  └─ templates/
 │  ├─ testing/
@@ -46,6 +48,7 @@
 - 推荐通过 uv run 执行 Python 入口；对于包化的 delivery CLI，推荐使用 python -m 形式。
 - 实际实现位于 scripts/board、scripts/delivery 和 scripts/release。
 - 默认交付主线位于 scripts/delivery/sherpa_onnx_rk3588/，按 source bundle、runtime assemble、upload/deploy、cli 拆分实现。
+- scripts/delivery/melotts_rknn2/ 提供可选的 Python + RKNN TTS 运行包，build 时会准备离线 wheelhouse，upload/all 时会在板端自动安装到运行包内的 pydeps/。
 - scripts/delivery/paddlespeech_tts_armlinux/ 保留为历史 CPU 基线，不再是默认入口。
 - scripts/delivery/templates/ 保存运行包 shell 模板，避免在 Python 入口中内嵌大段板端脚本。
 
@@ -66,13 +69,16 @@ uv sync
 uv run python -m scripts.delivery.sherpa_onnx_rk3588 download
 uv run python -m scripts.delivery.sherpa_onnx_rk3588 build
 uv run python -m scripts.delivery.sherpa_onnx_rk3588 all --source-ip 169.254.46.223
+uv run python -m scripts.delivery.melotts_rknn2 download
+uv run python -m scripts.delivery.melotts_rknn2 build
+uv run python -m scripts.delivery.melotts_rknn2 all --source-ip 169.254.46.223
 uv run python -m tests
 uv run python -m scripts.testing.rkvoice_report
 uv run python scripts/board/prepare_rknn_debug_bridge.py
 uv run python scripts/testing/rknn_toolkit2_profile_in_docker.py --prepare-board-debug-bridge
 uv run python scripts/board/set_board_static_ipv4.py
-uv run python scripts/release/package_release.py --version v1.0.0 --include-runtime-bundle --include-evidence
-uv run python scripts/release/package_release_in_docker.py --version v1.0.0 --include-runtime-bundle --include-evidence
+uv run python scripts/release/package_release.py --version v1.0.0 --include-runtime-bundle --include-evidence --include-melo-runtime-bundle --include-melo-evidence
+uv run python scripts/release/package_release_in_docker.py --version v1.0.0 --include-runtime-bundle --include-evidence --include-melo-runtime-bundle --include-melo-evidence
 ```
 
 ## 单元测试
@@ -139,6 +145,19 @@ uv run python -m scripts.testing.rkvoice_report --fail-on-requirement-failures
 - config/local/delivery.local.env
 - config/local/tts_test_plan.json
 
+MeloTTS-RKNN2 路径相关变量单独使用以下名字，避免和历史 TTS 目录配置串线：
+
+- RKVOICE_MELO_STAGE_DIR
+- RKVOICE_MELO_RUNTIME_DIR
+- RKVOICE_MELO_REMOTE_DIR
+- RKVOICE_MELO_TTS_TEXT
+
+MeloTTS-RKNN2 额外支持以下运行期变量：
+
+- RKVOICE_PYTHON_BIN
+- RKVOICE_PYDEPS_DIR
+- RKVOICE_PYTHON_DEPS_LOG
+
 配置优先级：
 
 1. 命令行参数
@@ -174,9 +193,12 @@ uv run python -m scripts.testing.rkvoice_report --fail-on-requirement-failures
 - ASR CPU/ONNX：可用
 - ASR RKNN/NPU：可用，要求板端提供兼容版本的 librknnrt.so
 - TTS CPU/ONNX：可用
+- TTS MeloTTS-RKNN2：可选验证路径，要求板端提供 python3；运行包会自带离线 wheelhouse 并在 upload/all 时自动安装 onnxruntime、soundfile、cn2an、inflect 和 rknn-toolkit-lite2 到 pydeps/
 - TTS RKNN/NPU：不是当前默认交付目标
 
 默认 TTS 模型仅作为技术基线，商业交付前应再次核验上游模型与数据许可。
+
+MeloTTS-RKNN2 上游镜像当前标注为 AGPL-3.0，因此即使技术上可跑，也不应在未完成法务评估前直接替换当前默认商业交付主线。
 
 当前默认冒烟结果目录：
 

@@ -32,6 +32,8 @@ class PackageReleaseDockerTests(WorkspaceTestCase):
             release_notes_path=None,
             include_runtime_bundle=True,
             include_evidence=True,
+            include_melo_runtime_bundle=True,
+            include_melo_evidence=True,
         )
 
         self.assertEqual(command[0:3], ["docker", "run", "--rm"])
@@ -43,6 +45,8 @@ class PackageReleaseDockerTests(WorkspaceTestCase):
         self.assertIn("v1.2.3", command)
         self.assertIn("--include-runtime-bundle", command)
         self.assertIn("--include-evidence", command)
+        self.assertIn("--include-melo-runtime-bundle", command)
+        self.assertIn("--include-melo-evidence", command)
 
     def test_build_docker_run_command_mounts_external_paths(self) -> None:
         with self.temp_dir("rkvoice_release_docker_") as temp_dir:
@@ -64,6 +68,8 @@ class PackageReleaseDockerTests(WorkspaceTestCase):
                 release_notes_path=external_release_notes,
                 include_runtime_bundle=False,
                 include_evidence=False,
+                include_melo_runtime_bundle=False,
+                include_melo_evidence=False,
             )
 
             self.assertIn("/mnt/external/0/out/releases", command)

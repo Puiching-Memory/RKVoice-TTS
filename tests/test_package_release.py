@@ -71,6 +71,14 @@ class PackageReleaseTests(WorkspaceTestCase):
                 "ok\n",
             )
             self._create_file(
+                workspace_root / "artifacts" / "runtime" / "melotts_rknn2_runtime" / "run_tts.sh",
+                "#!/bin/bash\n",
+            )
+            self._create_file(
+                workspace_root / "artifacts" / "runtime" / "melotts_rknn2_runtime" / "output" / "smoke_test_tts.wav",
+                "wav\n",
+            )
+            self._create_file(
                 workspace_root / "custom_release_notes.md",
                 "自定义版本={{VERSION}}\n",
             )
@@ -83,6 +91,8 @@ class PackageReleaseTests(WorkspaceTestCase):
                 release_notes_path=str(workspace_root / "custom_release_notes.md"),
                 include_runtime_bundle=True,
                 include_evidence=True,
+                include_melo_runtime_bundle=True,
+                include_melo_evidence=True,
             )
 
             self.assertTrue(
@@ -103,9 +113,29 @@ class PackageReleaseTests(WorkspaceTestCase):
                     / "smoke_test.log"
                 ).exists()
             )
+            self.assertTrue(
+                (
+                    result.release_dir
+                    / "artifacts"
+                    / "runtime"
+                    / "melotts_rknn2_runtime.tar.gz"
+                ).exists()
+            )
+            self.assertTrue(
+                (
+                    result.release_dir
+                    / "artifacts"
+                    / "runtime"
+                    / "melotts_rknn2_runtime"
+                    / "output"
+                    / "smoke_test_tts.wav"
+                ).exists()
+            )
             manifest = result.manifest_path.read_text(encoding="utf-8")
             release_notes = (result.release_dir / "RELEASE_NOTES.md").read_text(encoding="utf-8")
             self.assertIn("PackageLabel=demo-package", manifest)
             self.assertIn("IncludeRuntimeBundle=True", manifest)
             self.assertIn("IncludeEvidence=True", manifest)
+            self.assertIn("IncludeMeloRuntimeBundle=True", manifest)
+            self.assertIn("IncludeMeloEvidence=True", manifest)
             self.assertIn("自定义版本=release candidate", release_notes)

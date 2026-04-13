@@ -1,454 +1,677 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RKVoice 综合测试报告</title>
-  <link rel="stylesheet" href="{{ static_assets.tabler_css }}" />
-  <link rel="stylesheet" href="{{ static_assets.report_css }}" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RKVoice 综合测试报告</title>
+<style>
+/* ── Reset & Base ─────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--txt:#1e293b;--txt2:#64748b;--txt3:#94a3b8;
+  --pass:#16a34a;--pass-bg:#dcfce7;--fail:#dc2626;--fail-bg:#fee2e2;
+  --partial:#d97706;--partial-bg:#fef3c7;--unknown:#6b7280;--unknown-bg:#f3f4f6;
+  --accent:#2563eb;--accent-bg:#dbeafe;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;
+}
+html{font-size:14px;line-height:1.6;color:var(--txt);font-family:var(--font);background:var(--bg)}
+body{min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ── Layout ───────────────────────────────────────────── */
+.top-bar{position:sticky;top:0;z-index:100;background:linear-gradient(135deg,#0f172a,#1e293b);
+  color:#e2e8f0;padding:12px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.top-bar h1{font-size:1.15rem;font-weight:600;white-space:nowrap}
+.top-bar .meta{font-size:.8rem;color:#94a3b8;margin-left:auto;white-space:nowrap}
+.top-bar nav{display:flex;gap:6px;flex-wrap:wrap}
+.top-bar nav a{font-size:.78rem;color:#cbd5e1;padding:3px 10px;border-radius:4px;
+  border:1px solid rgba(255,255,255,.12);transition:background .15s}
+.top-bar nav a:hover{background:rgba(255,255,255,.1);text-decoration:none}
+
+.container{max-width:1280px;margin:0 auto;padding:24px 20px 48px}
+
+/* ── Cards & Sections ─────────────────────────────────── */
+.section{margin-bottom:32px}
+.section-title{font-size:1.1rem;font-weight:600;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--accent)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.card-header{padding:14px 18px;border-bottom:1px solid var(--border);font-weight:600;font-size:.92rem;display:flex;align-items:center;gap:10px}
+.card-body{padding:18px}
+
+/* ── Verdict ──────────────────────────────────────────── */
+.verdict-banner{display:flex;gap:24px;align-items:stretch;flex-wrap:wrap;margin-bottom:24px}
+.verdict-box{flex:0 0 280px;border-radius:var(--radius);padding:28px 24px;color:#fff;display:flex;
+  flex-direction:column;justify-content:center;box-shadow:var(--shadow)}
+.verdict-box.pass{background:linear-gradient(135deg,#15803d,#16a34a)}
+.verdict-box.fail{background:linear-gradient(135deg,#b91c1c,#dc2626)}
+.verdict-box.partial{background:linear-gradient(135deg,#b45309,#d97706)}
+.verdict-box.unknown{background:linear-gradient(135deg,#4b5563,#6b7280)}
+.verdict-label{font-size:.82rem;opacity:.85;margin-bottom:4px}
+.verdict-value{font-size:1.6rem;font-weight:700}
+.verdict-msg{font-size:.85rem;opacity:.9;margin-top:8px}
+.stats-grid{flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px 18px;box-shadow:var(--shadow);text-align:center}
+.stat-num{font-size:1.65rem;font-weight:700;color:var(--txt)}
+.stat-label{font-size:.78rem;color:var(--txt2);margin-top:2px}
+
+/* ── Metric Cards ─────────────────────────────────────── */
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-bottom:24px}
+.metric-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:0;overflow:hidden;box-shadow:var(--shadow);transition:transform .12s}
+.metric-card:hover{transform:translateY(-2px)}
+.metric-accent{height:4px}
+.metric-body{padding:14px 16px}
+.metric-title{font-size:.75rem;color:var(--txt2);text-transform:uppercase;letter-spacing:.3px}
+.metric-value{font-size:1.45rem;font-weight:700;margin:4px 0 2px}
+.metric-sub{font-size:.78rem;color:var(--txt3)}
+
+/* ── Tables ───────────────────────────────────────────── */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:.84rem}
+th{text-align:left;padding:9px 12px;background:#f8fafc;border-bottom:2px solid var(--border);
+  font-weight:600;color:var(--txt2);white-space:nowrap;position:sticky;top:0}
+td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:hover td{background:#f8fafc}
+.mono{font-family:"Cascadia Code","Fira Code",Consolas,monospace;font-size:.82rem}
+
+/* ── Pills ────────────────────────────────────────────── */
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.76rem;font-weight:600;white-space:nowrap}
+.pill-pass{background:var(--pass-bg);color:var(--pass)}
+.pill-fail{background:var(--fail-bg);color:var(--fail)}
+.pill-partial{background:var(--partial-bg);color:var(--partial)}
+.pill-unknown{background:var(--unknown-bg);color:var(--unknown)}
+
+/* ── Fact List ────────────────────────────────────────── */
+.fact-item{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed var(--border)}
+.fact-label{color:var(--txt2);font-size:.82rem;flex-shrink:0}
+.fact-value{font-weight:600;text-align:right;word-break:break-all}
+
+/* ── Status Filter ────────────────────────────────────── */
+.filter-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.filter-btn{padding:4px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);
+  cursor:pointer;font-size:.8rem;font-weight:500;transition:all .15s}
+.filter-btn:hover{border-color:var(--accent)}
+.filter-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* ── Chart ────────────────────────────────────────────── */
+.chart-container{position:relative;width:100%;height:200px;margin:12px 0}
+.chart-container svg{width:100%;height:100%}
+
+/* ── Collapsible ──────────────────────────────────────── */
+.collapse-btn{background:none;border:1px solid var(--border);border-radius:var(--radius);
+  padding:6px 14px;cursor:pointer;font-size:.82rem;color:var(--accent);margin-top:10px}
+.collapse-btn:hover{background:var(--accent-bg)}
+
+/* ── Media ────────────────────────────────────────────── */
+audio{width:100%;margin:8px 0}
+.asset-list{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.asset-list li{padding:8px 12px;background:#f8fafc;border-radius:6px;border:1px solid var(--border);font-size:.82rem;word-break:break-all}
+
+/* ── Smoke Card ───────────────────────────────────────── */
+.smoke-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.smoke-card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow)}
+.smoke-card .sc-head{padding:12px 16px;border-bottom:1px solid var(--border);font-weight:600;font-size:.88rem}
+.smoke-card .sc-body{padding:14px 16px;font-size:.84rem}
+.smoke-card .sc-row{display:flex;justify-content:space-between;padding:4px 0}
+.smoke-card .sc-key{color:var(--txt2)}
+.smoke-card .sc-val{font-weight:600}
+.smoke-card .sc-text{margin-top:8px;padding:8px 10px;background:#f8fafc;border-radius:6px;font-size:.82rem;word-break:break-all}
+
+/* ── Summary Strip ────────────────────────────────────── */
+.summary-strip{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.summary-chip{padding:6px 16px;border-radius:6px;font-size:.84rem;font-weight:600}
+.summary-chip.pass{background:var(--pass-bg);color:var(--pass)}
+.summary-chip.fail{background:var(--fail-bg);color:var(--fail)}
+.summary-chip.partial{background:var(--partial-bg);color:var(--partial)}
+.summary-chip.unknown{background:var(--unknown-bg);color:var(--unknown)}
+
+/* ── Heatmap ──────────────────────────────────────────── */
+.heatmap-embed{margin:16px 0;text-align:center}
+.heatmap-embed img,.heatmap-embed svg{max-width:100%;height:auto;border:1px solid var(--border);border-radius:var(--radius)}
+
+/* ── Responsive ───────────────────────────────────────── */
+@media(max-width:768px){
+  .verdict-banner{flex-direction:column}
+  .verdict-box{flex:auto}
+  .metric-grid{grid-template-columns:repeat(2,1fr)}
+  .top-bar{flex-direction:column;align-items:flex-start}
+  .top-bar .meta{margin-left:0}
+}
+@media(max-width:480px){
+  .metric-grid{grid-template-columns:1fr}
+  .container{padding:12px 10px 32px}
+}
+
+/* ── Print ────────────────────────────────────────────── */
+@media print{
+  .top-bar{position:relative;background:#1e293b;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .container{max-width:100%}
+  .collapse-btn,.filter-bar{display:none}
+}
+</style>
 </head>
 <body>
-  <div class="page">
-    <div class="page-wrapper">
-      <div class="page-header d-print-none report-page-header">
-        <div class="container-xl">
-          <div class="card report-hero-card">
-            <div class="card-body p-4 p-lg-5">
-              <div class="row g-4 align-items-start">
-                <div class="col-lg-8">
-                  <div class="page-pretitle mb-2">RKVoice Integrated Report</div>
-                  <h1 class="report-hero-title">RK3588 离线 ASR + TTS 综合测试报告</h1>
-                  <p class="report-hero-intro">{{ hero_intro }}</p>
-                  <div class="report-chip-list">
-                    {% for chip in hero_chips %}
-                    <span class="badge badge-outline text-secondary report-chip">{{ chip.label }} {{ chip.value }}</span>
-                    {% endfor %}
-                  </div>
-                  <div class="report-anchor-list">
-                    {% for link in navigation_links %}
-                    <a class="btn btn-outline-secondary btn-sm report-anchor-btn" href="#{{ link.section_id }}">{{ link.label }}</a>
-                    {% endfor %}
-                  </div>
-                </div>
-                <div class="col-lg-4">
-                  <div class="card report-verdict-card status-{{ verdict_class }}">
-                    <div class="card-body">
-                      <div class="page-pretitle text-reset opacity-75 mb-2">综合判定</div>
-                      <div class="report-verdict-value">{{ summary_label }}</div>
-                      <p class="report-verdict-message">{{ summary.message }}</p>
-                    </div>
-                  </div>
-                  <div class="row row-cards mt-3">
-                    {% for stat in hero_stats %}
-                    <div class="col-6">
-                      <div class="card report-mini-card">
-                        <div class="card-body">
-                          <div class="page-pretitle mb-1">{{ stat.label }}</div>
-                          <div class="report-mini-value">{{ stat.value }}</div>
-                        </div>
-                      </div>
-                    </div>
-                    {% endfor %}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div class="page-body">
-        <div class="container-xl">
-          <div class="row row-cards">
-            <div class="col-xl-8">
-              <section class="report-section" id="overview">
-                <div class="report-section-head">
-                  <div>
-                    <div class="page-pretitle">Overview</div>
-                    <h2 class="report-section-title">执行概览</h2>
-                    <p class="report-section-note">先看关键数字，再看矩阵和 profiler。导出页不再把所有表格堆在同一层，而是把当前可交付结论、缺口和板端状态分开呈现。</p>
-                  </div>
-                  <span class="badge bg-teal-lt text-teal-fg report-section-badge">Report Navigation Ready</span>
-                </div>
-                <div class="row row-cards">
-                  {% for card in cards %}
-                  <div class="col-sm-6 col-xl-4">
-                    <div class="card report-metric-card">
-                      <div class="report-metric-accent" style="background: {{ card.accent }}"></div>
-                      <div class="card-body">
-                        <div class="page-pretitle mb-2">{{ card.title }}</div>
-                        <div class="report-metric-value">{{ card.value }}</div>
-                        <div class="text-secondary report-metric-subtitle">{{ card.subtitle }}</div>
-                      </div>
-                    </div>
-                  </div>
-                  {% endfor %}
-                </div>
-                <div class="card report-soft-card">
-                  <div class="card-header">
-                    <div>
-                      <h3 class="card-title">指标总览</h3>
-                      <div class="text-secondary small">报告按 docs/requirements/项目指标.md 逐条生成状态。未通过说明当前证据已证明不达标，证据不足说明需要追加专门测试。</div>
-                    </div>
-                  </div>
-                  <div class="card-body">
-                    <div class="report-status-grid">
-                      {% for tile in status_tiles %}
-                      <div class="report-status-tile status-{{ tile.status }}">
-                        <span>{{ tile.label }}</span>
-                        <strong>{{ tile.count }}</strong>
-                      </div>
-                      {% endfor %}
-                    </div>
-                  </div>
-                </div>
-              </section>
+<div class="top-bar" id="topbar">
+  <h1>RKVoice 综合测试报告</h1>
+  <nav id="topnav"></nav>
+  <span class="meta" id="topmeta"></span>
+</div>
 
-              <section class="report-section" id="profiling">
-                <div class="card report-soft-card report-focus-card">
-                  <div class="card-header report-card-header-split">
-                    <div>
-                      <div class="page-pretitle">Profiler</div>
-                      <h3 class="card-title">RKNN 官方 Profiling</h3>
-                      <div class="text-secondary small">优先展示 Toolkit2 eval_perf() / RKNN_QUERY_PERF_DETAIL / PERF_RUN / MEM_SIZE 的结构化证据；RKNN_LOG_LEVEL=4 作为运行时层日志补充，rknpu/load 热力图仅用于时序负载观察。</div>
-                    </div>
-                    <span class="badge bg-teal-lt text-teal-fg report-section-badge">{{ rknn_profile_label }}</span>
-                  </div>
-                  <div class="card-body">
-                    <div class="report-summary-grid">
-                      {% for item in rknn_summary_boxes %}
-                      <div class="report-summary-box">
-                        <span>{{ item.label }}</span>
-                        <strong>{{ item.value }}</strong>
-                      </div>
-                      {% endfor %}
-                    </div>
+<div class="container">
+  <div id="verdict-section" class="section"></div>
 
-                    {% if top_layers %}
-                    <div class="report-subsection-title">热点层明细</div>
-                    <div class="table-responsive report-table-wrap">
-                      <table class="table table-vcenter card-table text-nowrap">
-                        <thead>
-                          <tr>
-                            <th>ID</th>
-                            <th>OpType</th>
-                            <th>Target</th>
-                            <th>Time</th>
-                            <th>NPU Cycles</th>
-                            <th>MacUsage</th>
-                            <th>WorkLoad</th>
-                            <th>Layer</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {% for layer in top_layers %}
-                          <tr>
-                            <td>{{ layer.id }}</td>
-                            <td>{{ layer.op_type }}</td>
-                            <td>{{ layer.target }}</td>
-                            <td>{{ layer.time }}</td>
-                            <td>{{ layer.npu_cycles }}</td>
-                            <td>{{ layer.mac_usage }}</td>
-                            <td>{{ layer.workload }}</td>
-                            <td class="text-wrap">{{ layer.layer }}</td>
-                          </tr>
-                          {% endfor %}
-                        </tbody>
-                      </table>
-                    </div>
-                    {% else %}
-                    <div class="report-empty-state mt-3">未发现可解析的 eval_perf / PERF_DETAIL 层级明细；报告会继续使用运行时层日志和 rknpu/load 采样。</div>
-                    {% endif %}
-
-                    {% if rknn_ranking_rows %}
-                    <div class="report-subsection-title">算子类型排行</div>
-                    <div class="table-responsive report-table-wrap">
-                      <table class="table table-vcenter card-table text-nowrap">
-                        <thead>
-                          <tr>
-                            <th>OpType</th>
-                            <th>Call Number</th>
-                            <th>Total Time</th>
-                            <th>Ratio</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {% for row in rknn_ranking_rows %}
-                          <tr>
-                            <td>{{ row.op_type }}</td>
-                            <td>{{ row.call_number }}</td>
-                            <td>{{ row.total_time }}</td>
-                            <td>{{ row.ratio }}</td>
-                          </tr>
-                          {% endfor %}
-                        </tbody>
-                      </table>
-                    </div>
-                    {% endif %}
-
-                    {% if runtime_log_preview %}
-                    <div class="report-subsection-title">RKNN_LOG_LEVEL=4 预览</div>
-                    <div class="report-log-preview"><pre>{% for line in runtime_log_preview %}{{ line }}{% if not loop.last %}
-{% endif %}{% endfor %}</pre></div>
-                    {% endif %}
-                  </div>
-                </div>
-              </section>
-
-              <section class="report-section" id="requirements">
-                <div class="report-section-head">
-                  <div>
-                    <div class="page-pretitle">Requirements</div>
-                    <h2 class="report-section-title">指标矩阵</h2>
-                    <p class="report-section-note">这里保留完整矩阵，方便审阅具体条目。表头固定，长表格横向可滚动，移动端也不会把内容压坏。</p>
-                  </div>
-                </div>
-                <div class="card report-soft-card">
-                  <div class="card-header">
-                    <div>
-                      <h3 class="card-title">Requirements Matrix</h3>
-                      <div class="text-secondary small">判定依据来自 {{ requirements_path }}</div>
-                    </div>
-                  </div>
-                  <div class="table-responsive report-table-wrap">
-                    <table class="table table-vcenter card-table">
-                      <thead>
-                        <tr>
-                          <th>章节</th>
-                          <th>子项</th>
-                          <th>要求</th>
-                          <th>状态</th>
-                          <th>观测</th>
-                          <th>判定依据</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {% for item in requirement_rows %}
-                        <tr class="report-status-row status-{{ item.status_class }}">
-                          <td>{{ item.section }}</td>
-                          <td>{{ item.subsection }}</td>
-                          <td class="text-wrap">{{ item.requirement }}</td>
-                          <td><span class="badge status-badge status-{{ item.status_class }}">{{ item.status_label }}</span></td>
-                          <td class="text-wrap">{{ item.observed }}</td>
-                          <td class="text-wrap">{{ item.rationale }}</td>
-                        </tr>
-                        {% endfor %}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </section>
-
-              <section class="report-section" id="evidence">
-                <div class="report-section-head">
-                  <div>
-                    <div class="page-pretitle">Evidence</div>
-                    <h2 class="report-section-title">证据媒体与时序采样</h2>
-                    <p class="report-section-note">音频预览和热力图用于补充说明运行期表现；真正的层级性能诊断请以上方 RKNN 官方 profiling 面板为准。</p>
-                  </div>
-                </div>
-                <div class="card report-soft-card">
-                  <div class="card-body">
-                    {% if media_cards %}
-                    <div class="row row-cards">
-                      {% for media in media_cards %}
-                      <div class="col-md-6">
-                        <div class="card report-media-card">
-                          <div class="card-body">
-                            <h3 class="card-title">{{ media.title }}</h3>
-                            {% if media.kind == 'audio' %}
-                            <audio controls preload="metadata" src="{{ media.src }}"></audio>
-                            {% else %}
-                            <img class="img-fluid rounded" alt="{{ media.alt }}" src="{{ media.src }}" />
-                            {% endif %}
-                            <div class="text-secondary small mt-3">{{ media.meta }}</div>
-                          </div>
-                        </div>
-                      </div>
-                      {% endfor %}
-                    </div>
-                    {% else %}
-                    <div class="report-empty-state">未发现可生成时序采样热力图的 profile 文件。</div>
-                    {% endif %}
-                  </div>
-                </div>
-              </section>
-
-              <section class="report-section" id="tests">
-                <div class="report-section-head">
-                  <div>
-                    <div class="page-pretitle">Tests</div>
-                    <h2 class="report-section-title">单元测试明细</h2>
-                    <p class="report-section-note">统一复用 tests 目录 discovery 入口。测试详情默认折叠，避免大段日志把主界面直接淹没。</p>
-                  </div>
-                </div>
-                <div class="card report-soft-card">
-                  <div class="table-responsive report-table-wrap">
-                    <table class="table table-vcenter card-table">
-                      <thead>
-                        <tr>
-                          <th>测试</th>
-                          <th>状态</th>
-                          <th>类型</th>
-                          <th>耗时</th>
-                          <th>详情</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {% if unit_test_rows %}
-                          {% for case in unit_test_rows %}
-                          <tr class="report-status-row status-{{ case.status_class }}">
-                            <td class="text-wrap">{{ case.test_id }}</td>
-                            <td><span class="badge status-badge status-{{ case.status_class }}">{{ case.status_label }}</span></td>
-                            <td>{{ case.case_label }}</td>
-                            <td>{{ '%.3fs'|format(case.duration_s) }}</td>
-                            <td>
-                              {% if case.has_details %}
-                              <details class="report-case-details">
-                                <summary>展开日志</summary>
-                                <pre>{{ case.details }}</pre>
-                              </details>
-                              {% else %}
-                              <span class="text-secondary small">无附加输出</span>
-                              {% endif %}
-                            </td>
-                          </tr>
-                          {% endfor %}
-                        {% else %}
-                        <tr>
-                          <td colspan="5">本次未执行 unittest。</td>
-                        </tr>
-                        {% endif %}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </section>
-            </div>
-
-            <div class="col-xl-4" id="appendix">
-              <div class="report-sticky-stack">
-                <div class="card report-soft-card">
-                  <div class="card-header">
-                    <h3 class="card-title">报告导航</h3>
-                  </div>
-                  <div class="card-body">
-                    <div class="report-anchor-list report-anchor-list-rail">
-                      {% for link in navigation_links %}
-                      <a class="btn btn-outline-secondary btn-sm report-anchor-btn" href="#{{ link.section_id }}">{{ link.label }}</a>
-                      {% endfor %}
-                    </div>
-                  </div>
-                </div>
-
-                <div class="card report-soft-card">
-                  <div class="card-header">
-                    <h3 class="card-title">运行画像</h3>
-                  </div>
-                  <div class="card-body">
-                    <div class="report-fact-list">
-                      {% for fact in runtime_facts %}
-                      <div class="report-fact-row">
-                        <div class="page-pretitle mb-1">{{ fact.label }}</div>
-                        <div class="report-fact-value">{{ fact.value }}</div>
-                        <div class="text-secondary small mt-1">{{ fact.detail }}</div>
-                      </div>
-                      {% endfor %}
-                    </div>
-                  </div>
-                </div>
-
-                <div class="card report-soft-card">
-                  <div class="card-header">
-                    <h3 class="card-title">模型基线</h3>
-                  </div>
-                  <div class="card-body">
-                    <div class="report-fact-list">
-                      {% for fact in model_facts %}
-                      <div class="report-fact-row">
-                        <div class="page-pretitle mb-1">{{ fact.label }}</div>
-                        <div class="report-fact-value">{{ fact.value }}</div>
-                        <div class="text-secondary small mt-1">{{ fact.detail }}</div>
-                      </div>
-                      {% endfor %}
-                    </div>
-                  </div>
-                </div>
-
-                <div class="card report-soft-card">
-                  <div class="card-header">
-                    <h3 class="card-title">冒烟摘要</h3>
-                  </div>
-                  <div class="card-body">
-                    <div class="report-story-grid">
-                      {% for story in smoke_briefs %}
-                      <article class="report-story-card">
-                        <div class="page-pretitle mb-2">{{ story.label }}</div>
-                        <div class="report-story-value">{{ story.value }}</div>
-                        <div class="text-secondary small mt-2">{{ story.meta }}</div>
-                        <div class="mt-3">{{ story.body }}</div>
-                      </article>
-                      {% endfor %}
-                    </div>
-                  </div>
-                </div>
-
-                <div class="card report-soft-card">
-                  <div class="card-header">
-                    <div>
-                      <h3 class="card-title">计划与基线</h3>
-                      <div class="text-secondary small">这里展示测试计划模板中的覆盖面，帮助区分“有计划但未执行”和“根本没有验证入口”。</div>
-                    </div>
-                  </div>
-                  <div class="table-responsive report-table-wrap">
-                    <table class="table table-vcenter card-table">
-                      <thead>
-                        <tr>
-                          <th>类别</th>
-                          <th>用例数</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {% if plan_rows %}
-                          {% for item in plan_rows %}
-                          <tr>
-                            <td>{{ item.category }}</td>
-                            <td>{{ item.count }}</td>
-                          </tr>
-                          {% endfor %}
-                        {% else %}
-                        <tr>
-                          <td colspan="2">未找到测试计划文件。</td>
-                        </tr>
-                        {% endif %}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div class="card report-soft-card">
-                  <div class="card-header">
-                    <h3 class="card-title">原始产物</h3>
-                  </div>
-                  <div class="card-body">
-                    {% if asset_links %}
-                    <ul class="report-asset-list">
-                      {% for asset in asset_links %}
-                      <li><a href="{{ asset.path }}">{{ asset.name }}</a></li>
-                      {% endfor %}
-                    </ul>
-                    {% else %}
-                    <div class="report-empty-state">未复制任何证据文件。</div>
-                    {% endif %}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+  <div id="overview-section" class="section">
+    <div class="section-title" id="sec-overview">执行概览</div>
+    <div id="metric-cards" class="metric-grid"></div>
   </div>
-  <script src="{{ static_assets.tabler_js }}" defer></script>
+
+  <div id="runtime-section" class="section">
+    <div class="section-title" id="sec-runtime">运行画像</div>
+    <div id="runtime-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px"></div>
+  </div>
+
+  <div id="req-section" class="section">
+    <div class="section-title" id="sec-requirements">指标矩阵</div>
+    <div id="req-content"></div>
+  </div>
+
+  <div id="profiling-section" class="section">
+    <div class="section-title" id="sec-profiling">RKNN Profiling</div>
+    <div id="profiling-content"></div>
+  </div>
+
+  <div id="smoke-section" class="section">
+    <div class="section-title" id="sec-smoke">冒烟测试</div>
+    <div id="smoke-content"></div>
+  </div>
+
+  <div id="unittest-section" class="section">
+    <div class="section-title" id="sec-tests">单元测试</div>
+    <div id="unittest-content"></div>
+  </div>
+
+  <div id="plan-section" class="section">
+    <div class="section-title" id="sec-plan">测试计划</div>
+    <div id="plan-content"></div>
+  </div>
+
+  <div id="assets-section" class="section">
+    <div class="section-title" id="sec-assets">证据产物</div>
+    <div id="assets-content"></div>
+  </div>
+</div>
+
+<script id="report-data" type="application/json">
+{{ payload_json }}
+</script>
+
+<script>
+/* ── Helpers ───────────────────────────────────────────── */
+var D = JSON.parse(document.getElementById('report-data').textContent);
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmt(v, d, sfx) {
+  if (v == null) return 'n/a';
+  sfx = sfx || '';
+  return Number(v).toFixed(d == null ? 1 : d) + sfx;
+}
+function statusLabel(s) {
+  return {pass:'\u901a\u8fc7',fail:'\u672a\u901a\u8fc7',partial:'\u90e8\u5206\u6ee1\u8db3',unknown:'\u8bc1\u636e\u4e0d\u8db3'}[s] || s;
+}
+function pillHtml(status) {
+  var cls = {pass:'pill-pass',fail:'pill-fail',partial:'pill-partial',unknown:'pill-unknown'}[status] || 'pill-unknown';
+  return '<span class="pill ' + cls + '">' + esc(statusLabel(status)) + '</span>';
+}
+
+/* ── Top Bar ───────────────────────────────────────────── */
+(function() {
+  var navItems = [
+    {id:'sec-overview',label:'\u6982\u89c8'},
+    {id:'sec-runtime',label:'\u8fd0\u884c\u753b\u50cf'},
+    {id:'sec-requirements',label:'\u6307\u6807'},
+    {id:'sec-profiling',label:'Profiling'},
+    {id:'sec-smoke',label:'\u5192\u70df'},
+    {id:'sec-tests',label:'\u5355\u6d4b'},
+    {id:'sec-plan',label:'\u8ba1\u5212'},
+    {id:'sec-assets',label:'\u4ea7\u7269'}
+  ];
+  document.getElementById('topnav').innerHTML = navItems.map(function(n){
+    return '<a href="#'+n.id+'">'+esc(n.label)+'</a>';
+  }).join('');
+  document.getElementById('topmeta').textContent = D.generated_at || '';
+})();
+
+/* ── Verdict + Stats ───────────────────────────────────── */
+(function() {
+  var s = D.summary || {};
+  var reqSum = (D.requirements || {}).summary || {};
+  var obs = D.observed || {};
+  var ut = D.unit_tests || {};
+  var evd = D.evidence || {};
+  var assetCount = Object.values(evd.assets || {}).filter(function(v){return v}).length;
+  var utIssues = (ut.failed || 0) + (ut.errors || 0) + (ut.unexpected_successes || 0);
+
+  var html = '<div class="verdict-banner">';
+  html += '<div class="verdict-box ' + esc(s.verdict || 'unknown') + '">';
+  html += '<div class="verdict-label">\u7efc\u5408\u5224\u5b9a</div>';
+  html += '<div class="verdict-value">' + esc(statusLabel(s.verdict)) + '</div>';
+  html += '<div class="verdict-msg">' + esc(s.message) + '</div>';
+  html += '</div>';
+
+  var stats = [
+    {n: (reqSum.pass||0)+(reqSum.fail||0)+(reqSum.partial||0)+(reqSum.unknown||0), l:'\u6307\u6807\u9879'},
+    {n: assetCount, l:'\u8bc1\u636e\u6587\u4ef6'},
+    {n: obs.rknn_operator_count || 0, l:'Profiler \u5c42\u7ea7'},
+    {n: utIssues, l:'\u5355\u6d4b\u95ee\u9898'}
+  ];
+  html += '<div class="stats-grid">';
+  stats.forEach(function(st){
+    html += '<div class="stat-card"><div class="stat-num">' + st.n + '</div><div class="stat-label">' + esc(st.l) + '</div></div>';
+  });
+  html += '</div></div>';
+  document.getElementById('verdict-section').innerHTML = html;
+})();
+
+/* ── Key Metrics ───────────────────────────────────────── */
+(function() {
+  var o = D.observed || {};
+  var cards = [
+    {t:'TTS \u5355\u53e5\u65f6\u5ef6',v:fmt(o.tts_elapsed_ms,0,' ms'),s:'\u540e\u7aef '+(o.tts_backend||'n/a'),c:'#d28d49,#9c5a12'},
+    {t:'ASR \u6d41\u5f0f\u65f6\u5ef6',v:fmt(o.asr_streaming_elapsed_ms,0,' ms'),s:'RTF '+fmt(o.asr_streaming_rtf,3),c:'#3b82f6,#1d4ed8'},
+    {t:'ASR RKNN \u65f6\u5ef6',v:fmt(o.asr_rknn_elapsed_ms,0,' ms'),s:'RTF '+fmt(o.asr_rknn_rtf,3),c:'#618fbf,#2f5e8a'},
+    {t:'NPU \u5cf0\u503c\u8d1f\u8f7d',v:fmt(o.npu_peak_percent,0,' %'),s:'\u6765\u81ea rknpu/load \u91c7\u6837',c:'#b65f6f,#7e3240'},
+    {t:'RKNN \u8fd0\u884c\u8017\u65f6',v:fmt(o.rknn_run_duration_ms,1,' ms'),s:'PERF_RUN / \u603b\u7b97\u5b50\u8017\u65f6',c:'#547e8e,#274754'},
+    {t:'\u5cf0\u503c MAC Usage',v:fmt(o.rknn_peak_mac_usage_percent,2,'%'),s:'\u5b98\u65b9 profiler \u8f93\u51fa',c:'#c68163,#7f3f2d'},
+    {t:'RKNN \u5185\u5b58\u603b\u91cf',v:fmt(o.rknn_total_memory_mib,2,' MiB'),s:'weight + internal tensor',c:'#6d8f79,#325944'},
+    {t:'\u6a21\u578b\u603b\u91cf',v:fmt(o.models_total_size_mib,1,' MiB'),s:'\u5f53\u524d models \u76ee\u5f55',c:'#7d7c98,#514f73'}
+  ];
+  var html = '';
+  cards.forEach(function(c){
+    html += '<div class="metric-card">';
+    html += '<div class="metric-accent" style="background:linear-gradient(135deg,'+c.c+')"></div>';
+    html += '<div class="metric-body">';
+    html += '<div class="metric-title">'+esc(c.t)+'</div>';
+    html += '<div class="metric-value">'+esc(c.v)+'</div>';
+    html += '<div class="metric-sub">'+esc(c.s)+'</div>';
+    html += '</div></div>';
+  });
+  document.getElementById('metric-cards').innerHTML = html;
+})();
+
+/* ── Runtime & Models ──────────────────────────────────── */
+(function() {
+  var rt = D.runtime || {};
+  var bc = ((D.evidence || {}).board_capabilities) || {};
+  var obs = D.observed || {};
+
+  function factCard(title, items) {
+    var h = '<div class="card"><div class="card-header">'+esc(title)+'</div><div class="card-body">';
+    items.forEach(function(it){
+      h += '<div class="fact-item"><span class="fact-label">'+esc(it[0])+'</span><span class="fact-value">'+esc(it[1])+'</span></div>';
+    });
+    h += '</div></div>';
+    return h;
+  }
+
+  var html = factCard('\u8fd0\u884c\u73af\u5883', [
+    ['TTS \u540e\u7aef', rt.tts_backend || 'n/a'],
+    ['ASR \u6a21\u5f0f', rt.asr_mode || 'n/a'],
+    ['RKNN Runtime', bc.rknn_runtime_version || 'n/a'],
+    ['\u677f\u7aef\u5185\u5b58', bc.memory_total || 'n/a'],
+    ['\u79bb\u7ebf\u5c31\u7eea', obs.offline_ready ? '\u2713 \u5c31\u7eea' : '\u5f85\u786e\u8ba4'],
+    ['TTS RTF', fmt(obs.tts_rtf, 3)]
+  ]);
+
+  html += factCard('\u6a21\u578b\u6e05\u5355', [
+    ['TTS', (rt.tts_model_name||'n/a')+' ('+fmt(rt.tts_model_size_mib,2,' MiB')+')'],
+    ['ASR CPU', (rt.asr_cpu_model_name||'n/a')+' ('+fmt(rt.asr_cpu_model_size_mib,2,' MiB')+')'],
+    ['ASR RKNN', (rt.asr_rknn_model_name||'n/a')+' ('+fmt(rt.asr_rknn_model_size_mib,2,' MiB')+')'],
+    ['ASR \u6d41\u5f0f', (rt.asr_streaming_model_name||'n/a')+' ('+fmt(rt.asr_streaming_model_size_mib,1,' MiB')+')'],
+    ['\u6a21\u578b\u603b\u8ba1', fmt(rt.models_total_size_mib,1,' MiB')]
+  ]);
+
+  document.getElementById('runtime-content').innerHTML = html;
+})();
+
+/* ── Requirements ──────────────────────────────────────── */
+(function() {
+  var req = D.requirements || {};
+  var sum = req.summary || {};
+  var items = req.items || [];
+
+  var html = '<div class="summary-strip">';
+  ['pass','fail','partial','unknown'].forEach(function(st){
+    html += '<div class="summary-chip '+st+'">'+esc(statusLabel(st))+' '+(sum[st]||0)+'</div>';
+  });
+  html += '</div>';
+
+  html += '<div class="filter-bar" id="req-filters">';
+  html += '<button class="filter-btn active" data-f="all">\u5168\u90e8</button>';
+  ['fail','partial','unknown','pass'].forEach(function(st){
+    html += '<button class="filter-btn" data-f="'+st+'">'+esc(statusLabel(st))+'</button>';
+  });
+  html += '</div>';
+
+  html += '<div class="card"><div class="tbl-wrap"><table id="req-table">';
+  html += '<thead><tr><th>\u7ae0\u8282</th><th>\u6307\u6807</th><th>\u72b6\u6001</th><th>\u89c2\u6d4b</th><th>\u4f9d\u636e</th></tr></thead><tbody>';
+  items.forEach(function(it){
+    var sec = it.subsection ? it.subsection : it.section;
+    html += '<tr data-status="'+esc(it.status)+'">';
+    html += '<td class="mono" style="white-space:nowrap">'+esc(sec)+'</td>';
+    html += '<td>'+esc(it.requirement)+'</td>';
+    html += '<td>'+pillHtml(it.status)+'</td>';
+    html += '<td>'+esc(it.observed)+'</td>';
+    html += '<td style="color:var(--txt2);font-size:.8rem">'+esc(it.rationale)+'</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+  document.getElementById('req-content').innerHTML = html;
+
+  document.getElementById('req-filters').addEventListener('click', function(e){
+    if (!e.target.matches('.filter-btn')) return;
+    var f = e.target.getAttribute('data-f');
+    this.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active')});
+    e.target.classList.add('active');
+    document.querySelectorAll('#req-table tbody tr').forEach(function(tr){
+      tr.style.display = (f === 'all' || tr.getAttribute('data-status') === f) ? '' : 'none';
+    });
+  });
+})();
+
+/* ── RKNN Profiling ────────────────────────────────────── */
+(function() {
+  var evd = D.evidence || {};
+  var rknn = evd.rknn_perf || {};
+  var mem = evd.rknn_memory || {};
+  var obs = D.observed || {};
+  var summ = rknn.summary || {};
+  var operators = rknn.operators || [];
+  var ranking = rknn.ranking || [];
+  var load = evd.rknpu_load || {};
+  var samples = load.samples || [];
+
+  var sourceLabel = obs.rknn_profile_source || 'n/a';
+  if (sourceLabel === 'eval_perf') sourceLabel = 'Toolkit2 eval_perf()';
+  else if (sourceLabel === 'perf_detail') sourceLabel = 'rknn perf_detail';
+
+  var boxes = [
+    {l:'Profile Source', v:sourceLabel},
+    {l:'\u5c42\u7ea7\u8bb0\u5f55', v:rknn.operator_count || 0},
+    {l:'NPU \u7b97\u5b50\u6570', v:rknn.npu_operator_count || 0},
+    {l:'\u603b\u7b97\u5b50\u8017\u65f6', v:fmt(summ.total_operator_elapsed_time_us,0,' \u03bcs')},
+    {l:'\u5cf0\u503c MAC Usage', v:fmt(summ.peak_mac_usage_percent,2,'%')},
+    {l:'\u70ed\u70b9\u7b97\u5b50', v:summ.hottest_op_type || 'n/a'},
+    {l:'RKNN \u603b\u5185\u5b58', v:fmt(mem.total_memory_mib,2,' MiB')},
+    {l:'PERF_RUN', v:fmt(obs.rknn_run_duration_ms,3,' ms')}
+  ];
+  var html = '<div class="metric-grid" style="margin-bottom:20px">';
+  boxes.forEach(function(b){
+    html += '<div class="metric-card"><div class="metric-accent" style="background:linear-gradient(135deg,#8b7ab8,#51407c)"></div>';
+    html += '<div class="metric-body"><div class="metric-title">'+esc(b.l)+'</div>';
+    html += '<div class="metric-value" style="font-size:1.15rem">'+esc(String(b.v))+'</div></div></div>';
+  });
+  html += '</div>';
+
+  if (operators.length > 0) {
+    var sorted = operators.slice().sort(function(a,b){return (b.time_us||0)-(a.time_us||0)});
+    var showCount = Math.min(20, sorted.length);
+    html += '<div class="card" style="margin-bottom:16px"><div class="card-header">Top Operators by Time</div>';
+    html += '<div class="tbl-wrap" style="max-height:460px;overflow-y:auto"><table>';
+    html += '<thead><tr><th>#</th><th>OpType</th><th>DataType</th><th>Target</th><th>Time (\u03bcs)</th><th>MAC Usage</th><th>Workload</th><th>Layer</th></tr></thead><tbody id="op-tbody">';
+    for (var i = 0; i < showCount; i++) {
+      var op = sorted[i];
+      html += '<tr><td>'+esc(op.id)+'</td>';
+      html += '<td class="mono">'+esc(op.op_type)+'</td>';
+      html += '<td>'+esc(op.data_type)+'</td>';
+      html += '<td><span class="pill '+(op.target==='NPU'?'pill-pass':'pill-unknown')+'">'+esc(op.target)+'</span></td>';
+      html += '<td class="mono" style="text-align:right">'+fmt(op.time_us,0)+'</td>';
+      html += '<td class="mono" style="text-align:right">'+(op.mac_usage_percent!=null?fmt(op.mac_usage_percent,2,'%'):'')+'</td>';
+      html += '<td class="mono">'+esc(op.workload||'')+'</td>';
+      html += '<td class="mono" style="font-size:.76rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(op.full_name||'')+'">'+esc(op.full_name||op.output_shape||'')+'</td></tr>';
+    }
+    html += '</tbody></table></div>';
+    if (sorted.length > showCount) {
+      html += '<div style="padding:10px 18px"><button class="collapse-btn" id="expand-ops">\u5c55\u5f00\u5168\u90e8 '+sorted.length+' \u6761</button></div>';
+    }
+    html += '</div>';
+  }
+
+  if (ranking.length > 0) {
+    html += '<div class="card" style="margin-bottom:16px"><div class="card-header">Operator Ranking</div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>OpType</th><th>Calls</th><th>CPU (\u03bcs)</th><th>NPU (\u03bcs)</th><th>Total (\u03bcs)</th><th>Ratio</th></tr></thead><tbody>';
+    ranking.forEach(function(r){
+      html += '<tr><td class="mono">'+esc(r.op_type)+'</td>';
+      html += '<td style="text-align:right">'+esc(r.call_number)+'</td>';
+      html += '<td class="mono" style="text-align:right">'+fmt(r.cpu_time_us,0)+'</td>';
+      html += '<td class="mono" style="text-align:right">'+fmt(r.npu_time_us,0)+'</td>';
+      html += '<td class="mono" style="text-align:right">'+fmt(r.total_time_us,0)+'</td>';
+      html += '<td class="mono" style="text-align:right">'+(r.time_ratio_percent!=null?fmt(r.time_ratio_percent,2,'%'):'')+'</td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  if (samples.length > 1) {
+    html += '<div class="card"><div class="card-header">NPU Core Load \u65f6\u5e8f</div><div class="card-body">';
+    html += '<div class="chart-container" id="npu-chart"></div>';
+    html += '<div style="font-size:.78rem;color:var(--txt2);margin-top:6px">\u91c7\u6837 '+samples.length+' \u70b9 \u00b7 \u5cf0\u503c '+(load.peak_percent||0)+'% \u00b7 \u5747\u503c '+fmt(load.mean_percent,1,'%')+'</div>';
+    html += '</div></div>';
+  }
+
+  var assets = evd.assets || {};
+  if (assets.asr_rknpu_load_heatmap) {
+    html += '<div class="card" style="margin-top:16px"><div class="card-header">ASR RKNN NPU Load Heatmap</div>';
+    html += '<div class="card-body heatmap-embed"><img src="'+esc(assets.asr_rknpu_load_heatmap)+'" alt="NPU Load Heatmap"></div></div>';
+  }
+  if (assets.tts_profile_heatmap) {
+    html += '<div class="card" style="margin-top:16px"><div class="card-header">TTS Profile Heatmap</div>';
+    html += '<div class="card-body heatmap-embed"><img src="'+esc(assets.tts_profile_heatmap)+'" alt="TTS Profile Heatmap"></div></div>';
+  }
+
+  document.getElementById('profiling-content').innerHTML = html;
+
+  /* Expand operators */
+  if (operators.length > 20) {
+    var expandBtn = document.getElementById('expand-ops');
+    if (expandBtn) {
+      expandBtn.addEventListener('click', function() {
+        var sorted2 = operators.slice().sort(function(a,b){return (b.time_us||0)-(a.time_us||0)});
+        var extra = '';
+        for (var j = 20; j < sorted2.length; j++) {
+          var op2 = sorted2[j];
+          extra += '<tr><td>'+esc(op2.id)+'</td>';
+          extra += '<td class="mono">'+esc(op2.op_type)+'</td>';
+          extra += '<td>'+esc(op2.data_type)+'</td>';
+          extra += '<td><span class="pill '+(op2.target==='NPU'?'pill-pass':'pill-unknown')+'">'+esc(op2.target)+'</span></td>';
+          extra += '<td class="mono" style="text-align:right">'+fmt(op2.time_us,0)+'</td>';
+          extra += '<td class="mono" style="text-align:right">'+(op2.mac_usage_percent!=null?fmt(op2.mac_usage_percent,2,'%'):'')+'</td>';
+          extra += '<td class="mono">'+esc(op2.workload||'')+'</td>';
+          extra += '<td class="mono" style="font-size:.76rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(op2.full_name||'')+'">'+esc(op2.full_name||op2.output_shape||'')+'</td></tr>';
+        }
+        document.getElementById('op-tbody').insertAdjacentHTML('beforeend', extra);
+        this.remove();
+      });
+    }
+  }
+
+  /* Draw NPU load chart */
+  if (samples.length > 1) {
+    var ctr = document.getElementById('npu-chart');
+    var W = ctr.clientWidth || 800, H = 180;
+    var pad = {l:40,r:12,t:10,b:24};
+    var pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+    var maxY = Math.max(100, load.peak_percent || 100);
+
+    function polyline(key, color) {
+      var pts = samples.map(function(s2,idx){
+        var x = pad.l + (idx / (samples.length - 1)) * pw;
+        var y = pad.t + ph - ((s2[key] || 0) / maxY) * ph;
+        return x.toFixed(1)+','+y.toFixed(1);
+      }).join(' ');
+      return '<polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="1.5" stroke-linejoin="round"/>';
+    }
+
+    var svg = '<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg">';
+    for (var g = 0; g <= 4; g++) {
+      var gy = pad.t + (g / 4) * ph;
+      var label = Math.round(maxY - (g / 4) * maxY);
+      svg += '<line x1="'+pad.l+'" y1="'+gy+'" x2="'+(W-pad.r)+'" y2="'+gy+'" stroke="#e2e8f0" stroke-width="0.5"/>';
+      svg += '<text x="'+(pad.l-4)+'" y="'+(gy+4)+'" text-anchor="end" font-size="10" fill="#94a3b8">'+label+'%</text>';
+    }
+    svg += polyline('core0_percent', '#ef4444');
+    svg += polyline('core1_percent', '#3b82f6');
+    svg += polyline('core2_percent', '#22c55e');
+    svg += '<text x="'+(pad.l+8)+'" y="'+(H-4)+'" font-size="10" fill="#ef4444">Core0</text>';
+    svg += '<text x="'+(pad.l+58)+'" y="'+(H-4)+'" font-size="10" fill="#3b82f6">Core1</text>';
+    svg += '<text x="'+(pad.l+108)+'" y="'+(H-4)+'" font-size="10" fill="#22c55e">Core2</text>';
+    svg += '</svg>';
+    ctr.innerHTML = svg;
+  }
+})();
+
+/* ── Smoke Tests ───────────────────────────────────────── */
+(function() {
+  var smoke = ((D.evidence || {}).smoke) || {};
+  var assets = ((D.evidence || {}).assets) || {};
+  var audio = (D.evidence || {}).audio || {};
+
+  function smokeCard(title, data) {
+    if (!data || Object.keys(data).length === 0) return '';
+    var h = '<div class="smoke-card"><div class="sc-head">'+esc(title)+'</div><div class="sc-body">';
+    if (data.elapsed_seconds != null)
+      h += '<div class="sc-row"><span class="sc-key">\u8017\u65f6</span><span class="sc-val">'+fmt(data.elapsed_seconds,3,' s')+'</span></div>';
+    if (data.audio_duration_seconds != null)
+      h += '<div class="sc-row"><span class="sc-key">\u97f3\u9891\u65f6\u957f</span><span class="sc-val">'+fmt(data.audio_duration_seconds,3,' s')+'</span></div>';
+    if (data.rtf != null)
+      h += '<div class="sc-row"><span class="sc-key">RTF</span><span class="sc-val">'+fmt(data.rtf,3)+'</span></div>';
+    if (data.text)
+      h += '<div class="sc-text">'+esc(data.text)+'</div>';
+    if (data.result && data.result.text)
+      h += '<div class="sc-text">\u8f6c\u5199: '+esc(data.result.text)+'</div>';
+    h += '</div></div>';
+    return h;
+  }
+
+  var html = '<div class="smoke-grid">';
+  html += smokeCard('CPU TTS \u5192\u70df', smoke.tts);
+  html += smokeCard('Streaming ASR \u5192\u70df', smoke.asr_streaming);
+  html += smokeCard('CPU ASR \u5192\u70df', smoke.asr_cpu);
+  html += smokeCard('RKNN ASR \u5192\u70df', smoke.asr_rknn);
+  html += '</div>';
+
+  if (assets.audio) {
+    html += '<div class="card" style="margin-top:16px"><div class="card-header">\u97f3\u9891\u9884\u89c8';
+    if (audio.duration_s) html += ' <span style="font-weight:400;color:var(--txt2);font-size:.8rem">'+fmt(audio.duration_s,3,' s')+' \u00b7 '+fmt(audio.size_mib,3,' MiB')+'</span>';
+    html += '</div><div class="card-body">';
+    html += '<audio controls preload="metadata" src="'+esc(assets.audio)+'"></audio>';
+    html += '</div></div>';
+  }
+
+  document.getElementById('smoke-content').innerHTML = html;
+})();
+
+/* ── Unit Tests ────────────────────────────────────────── */
+(function() {
+  var ut = D.unit_tests;
+  if (!ut) {
+    document.getElementById('unittest-content').innerHTML = '<div class="card"><div class="card-body" style="color:var(--txt2)">\u672c\u6b21\u62a5\u544a\u672a\u6267\u884c\u5355\u5143\u6d4b\u8bd5\u3002</div></div>';
+    return;
+  }
+
+  var html = '<div class="summary-strip">';
+  html += '<div class="summary-chip pass">\u901a\u8fc7 '+ut.passed+'</div>';
+  if (ut.failed) html += '<div class="summary-chip fail">\u5931\u8d25 '+ut.failed+'</div>';
+  if (ut.errors) html += '<div class="summary-chip fail">\u9519\u8bef '+ut.errors+'</div>';
+  if (ut.skipped) html += '<div class="summary-chip partial">\u8df3\u8fc7 '+ut.skipped+'</div>';
+  html += '<div class="summary-chip unknown">\u603b\u8ba1 '+ut.total+' \u00b7 '+fmt(ut.duration_s,2,' s')+'</div>';
+  html += '</div>';
+
+  var cases = ut.cases || [];
+  if (cases.length > 0) {
+    html += '<div class="card"><div class="tbl-wrap" style="max-height:500px;overflow-y:auto"><table>';
+    html += '<thead><tr><th>\u6d4b\u8bd5\u7528\u4f8b</th><th>\u72b6\u6001</th><th>\u8017\u65f6</th></tr></thead><tbody>';
+    cases.forEach(function(c){
+      var st = c.status === 'passed' ? 'pass' : (c.status === 'skipped' ? 'partial' : 'fail');
+      html += '<tr><td class="mono" style="font-size:.8rem">'+esc(c.test_id)+'</td>';
+      html += '<td>'+pillHtml(st)+'</td>';
+      html += '<td class="mono" style="text-align:right">'+fmt(c.duration_s,3,' s')+'</td></tr>';
+      if (c.details && c.details.trim()) {
+        html += '<tr><td colspan="3" style="background:#fef2f2;font-size:.78rem;white-space:pre-wrap;font-family:monospace">'+esc(c.details)+'</td></tr>';
+      }
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  if (ut.output_asset) {
+    html += '<div style="margin-top:10px;font-size:.82rem"><a href="'+esc(ut.output_asset)+'">\u67e5\u770b\u5b8c\u6574 unittest \u8f93\u51fa</a></div>';
+  }
+
+  document.getElementById('unittest-content').innerHTML = html;
+})();
+
+/* ── Test Plan ─────────────────────────────────────────── */
+(function() {
+  var plan = D.plan || {};
+  if (!plan.name) {
+    document.getElementById('plan-content').innerHTML = '<div class="card"><div class="card-body" style="color:var(--txt2)">\u672a\u914d\u7f6e\u6d4b\u8bd5\u8ba1\u5212\u3002</div></div>';
+    return;
+  }
+
+  var html = '<div class="card"><div class="card-body">';
+  html += '<div class="fact-item"><span class="fact-label">\u8ba1\u5212\u540d\u79f0</span><span class="fact-value">'+esc(plan.name)+'</span></div>';
+  html += '<div class="fact-item"><span class="fact-label">\u63cf\u8ff0</span><span class="fact-value">'+esc(plan.description)+'</span></div>';
+  html += '<div class="fact-item"><span class="fact-label">\u7528\u4f8b\u603b\u6570</span><span class="fact-value">'+esc(plan.case_count)+'</span></div>';
+  html += '</div></div>';
+
+  var cats = plan.category_counts || {};
+  var catKeys = Object.keys(cats);
+  if (catKeys.length > 0) {
+    html += '<div class="card" style="margin-top:12px"><div class="card-header">\u7528\u4f8b\u7c7b\u522b</div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>\u7c7b\u522b</th><th style="text-align:right">\u6570\u91cf</th></tr></thead><tbody>';
+    catKeys.sort().forEach(function(k){
+      html += '<tr><td>'+esc(k)+'</td><td style="text-align:right">'+esc(cats[k])+'</td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  var acc = plan.acceptance_cases || [];
+  if (acc.length > 0) {
+    html += '<div class="card" style="margin-top:12px"><div class="card-header">\u9a8c\u6536\u7528\u4f8b</div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>ID</th><th>\u540d\u79f0</th><th>\u65f6\u5ef6\u9608\u503c</th><th>RTF \u9608\u503c</th><th>\u5907\u6ce8</th></tr></thead><tbody>';
+    acc.forEach(function(a){
+      html += '<tr><td class="mono">'+esc(a.id)+'</td>';
+      html += '<td>'+esc(a.name)+'</td>';
+      html += '<td style="text-align:right">'+fmt(a.latency_threshold_ms,0,' ms')+'</td>';
+      html += '<td style="text-align:right">'+fmt(a.rtf_threshold,2)+'</td>';
+      html += '<td style="color:var(--txt2);font-size:.8rem">'+esc(a.notes||'')+'</td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  document.getElementById('plan-content').innerHTML = html;
+})();
+
+/* ── Assets ────────────────────────────────────────────── */
+(function() {
+  var assets = ((D.evidence || {}).assets) || {};
+  var keys = Object.keys(assets).filter(function(k){return assets[k]});
+  if (keys.length === 0) {
+    document.getElementById('assets-content').innerHTML = '<div class="card"><div class="card-body" style="color:var(--txt2)">\u65e0\u8bc1\u636e\u4ea7\u7269\u6587\u4ef6\u3002</div></div>';
+    return;
+  }
+
+  var html = '<div class="card"><div class="card-body"><ul class="asset-list">';
+  keys.forEach(function(k){
+    html += '<li><a href="'+esc(assets[k])+'">'+esc(k)+'</a> <span style="color:var(--txt3);font-size:.76rem">\u2192 '+esc(assets[k])+'</span></li>';
+  });
+  html += '</ul></div></div>';
+  document.getElementById('assets-content').innerHTML = html;
+})();
+</script>
 </body>
 </html>

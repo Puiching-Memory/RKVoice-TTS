@@ -77,6 +77,8 @@ def build_release_args(
     release_notes_path: str | None,
     include_runtime_bundle: bool,
     include_evidence: bool,
+    include_melo_runtime_bundle: bool,
+    include_melo_evidence: bool,
 ) -> list[str]:
     args = ["--package-name", package_name]
     if version:
@@ -89,6 +91,10 @@ def build_release_args(
         args.append("--include-runtime-bundle")
     if include_evidence:
         args.append("--include-evidence")
+    if include_melo_runtime_bundle:
+        args.append("--include-melo-runtime-bundle")
+    if include_melo_evidence:
+        args.append("--include-melo-evidence")
     return args
 
 
@@ -119,6 +125,8 @@ def build_docker_run_command(
     release_notes_path: Path | None,
     include_runtime_bundle: bool,
     include_evidence: bool,
+    include_melo_runtime_bundle: bool,
+    include_melo_evidence: bool,
 ) -> list[str]:
     command = [
         "docker",
@@ -168,6 +176,8 @@ def build_docker_run_command(
             release_notes_path=mapped_release_notes_path,
             include_runtime_bundle=include_runtime_bundle,
             include_evidence=include_evidence,
+            include_melo_runtime_bundle=include_melo_runtime_bundle,
+            include_melo_evidence=include_melo_evidence,
         )
     )
     return command
@@ -184,6 +194,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--release-notes-path", type=Path, default=None, help="Custom release notes template or rendered notes source")
     parser.add_argument("--include-runtime-bundle", action="store_true", help="Include artifacts/runtime/sherpa_onnx_rk3588_runtime.tar.gz")
     parser.add_argument("--include-evidence", action="store_true", help="Include artifacts/runtime/sherpa_onnx_rk3588_runtime/output")
+    parser.add_argument("--include-melo-runtime-bundle", action="store_true", help="Include artifacts/runtime/melotts_rknn2_runtime.tar.gz")
+    parser.add_argument("--include-melo-evidence", action="store_true", help="Include artifacts/runtime/melotts_rknn2_runtime/output")
     return parser.parse_args(argv)
 
 
@@ -214,6 +226,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             release_notes_path=args.release_notes_path,
             include_runtime_bundle=args.include_runtime_bundle,
             include_evidence=args.include_evidence,
+            include_melo_runtime_bundle=args.include_melo_runtime_bundle,
+            include_melo_evidence=args.include_melo_evidence,
         )
     )
     return run_status

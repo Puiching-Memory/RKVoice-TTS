@@ -4,6 +4,7 @@ import argparse
 import re
 import shutil
 import sys
+import tarfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -23,8 +24,14 @@ BASE_ITEMS = (
     "docs",
     "scripts",
 )
-RUNTIME_BUNDLE_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime.tar.gz"
-EVIDENCE_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime\\output"
+SHERPA_RUNTIME_DIR_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime"
+SHERPA_RUNTIME_BUNDLE_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime.tar.gz"
+SHERPA_EVIDENCE_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime\\output"
+MELO_RUNTIME_DIR_RELATIVE_PATH = "artifacts\\runtime\\melotts_rknn2_runtime"
+MELO_RUNTIME_BUNDLE_RELATIVE_PATH = "artifacts\\runtime\\melotts_rknn2_runtime.tar.gz"
+MELO_EVIDENCE_RELATIVE_PATH = "artifacts\\runtime\\melotts_rknn2_runtime\\output"
+RUNTIME_BUNDLE_RELATIVE_PATH = SHERPA_RUNTIME_BUNDLE_RELATIVE_PATH
+EVIDENCE_RELATIVE_PATH = SHERPA_EVIDENCE_RELATIVE_PATH
 INVALID_PATH_SEGMENT_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 WHITESPACE_PATTERN = re.compile(r"\s+")
 
@@ -88,6 +95,31 @@ def copy_required_workspace_item(*, relative_path: str, workspace_root: Path, re
         raise ReleasePackagingError(f"发布内容缺失：{relative_path}")
 
 
+def copy_or_archive_runtime_bundle(
+    *,
+    archive_relative_path: str,
+    runtime_dir_relative_path: str,
+    workspace_root: Path,
+    release_dir: Path,
+) -> None:
+    archive_source = workspace_root / relative_path_to_path(archive_relative_path)
+    destination = release_dir / relative_path_to_path(archive_relative_path)
+    if archive_source.exists():
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(archive_source, destination)
+        return
+
+    runtime_dir = workspace_root / relative_path_to_path(runtime_dir_relative_path)
+    if not runtime_dir.exists():
+        raise ReleasePackagingError(f"发布内容缺失：{archive_relative_path}")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        destination.unlink()
+    with tarfile.open(destination, "w:gz") as archive:
+        archive.add(runtime_dir, arcname=runtime_dir.name)
+
+
 def resolve_release_notes_source(*, workspace_root: Path, release_notes_path: str | None) -> Path:
     if release_notes_path:
         candidate = Path(release_notes_path).expanduser().resolve()
@@ -137,6 +169,8 @@ def write_release_manifest(
     zip_path: Path,
     include_runtime_bundle: bool,
     include_evidence: bool,
+    include_melo_runtime_bundle: bool,
+    include_melo_evidence: bool,
     included_items: Sequence[str],
 ) -> None:
     lines = [
@@ -152,6 +186,8 @@ def write_release_manifest(
         f"ZipPath={zip_path}",
         f"IncludeRuntimeBundle={include_runtime_bundle}",
         f"IncludeEvidence={include_evidence}",
+        f"IncludeMeloRuntimeBundle={include_melo_runtime_bundle}",
+        f"IncludeMeloEvidence={include_melo_evidence}",
         "",
         "IncludedItems:",
     ]
@@ -187,6 +223,8 @@ def build_release(
     release_notes_path: str | None = None,
     include_runtime_bundle: bool = False,
     include_evidence: bool = False,
+    include_melo_runtime_bundle: bool = False,
+    include_melo_evidence: bool = False,
 ) -> ReleasePackageResult:
     workspace_root = workspace_root.resolve()
     resolved_output_root = (output_root or DEFAULT_OUTPUT_ROOT).resolve()
@@ -230,20 +268,38 @@ def build_release(
     included_items.append("RELEASE_NOTES.md")
 
     if include_runtime_bundle:
-        copy_required_workspace_item(
-            relative_path=RUNTIME_BUNDLE_RELATIVE_PATH,
+        copy_or_archive_runtime_bundle(
+            archive_relative_path=SHERPA_RUNTIME_BUNDLE_RELATIVE_PATH,
+            runtime_dir_relative_path=SHERPA_RUNTIME_DIR_RELATIVE_PATH,
             workspace_root=workspace_root,
             release_dir=release_dir,
         )
-        included_items.append(RUNTIME_BUNDLE_RELATIVE_PATH)
+        included_items.append(SHERPA_RUNTIME_BUNDLE_RELATIVE_PATH)
 
     if include_evidence:
         copy_required_workspace_item(
-            relative_path=EVIDENCE_RELATIVE_PATH,
+            relative_path=SHERPA_EVIDENCE_RELATIVE_PATH,
             workspace_root=workspace_root,
             release_dir=release_dir,
         )
-        included_items.append(EVIDENCE_RELATIVE_PATH)
+        included_items.append(SHERPA_EVIDENCE_RELATIVE_PATH)
+
+    if include_melo_runtime_bundle:
+        copy_or_archive_runtime_bundle(
+            archive_relative_path=MELO_RUNTIME_BUNDLE_RELATIVE_PATH,
+            runtime_dir_relative_path=MELO_RUNTIME_DIR_RELATIVE_PATH,
+            workspace_root=workspace_root,
+            release_dir=release_dir,
+        )
+        included_items.append(MELO_RUNTIME_BUNDLE_RELATIVE_PATH)
+
+    if include_melo_evidence:
+        copy_required_workspace_item(
+            relative_path=MELO_EVIDENCE_RELATIVE_PATH,
+            workspace_root=workspace_root,
+            release_dir=release_dir,
+        )
+        included_items.append(MELO_EVIDENCE_RELATIVE_PATH)
 
     manifest_path = release_dir / "RELEASE_MANIFEST.md"
     write_release_manifest(
@@ -258,6 +314,8 @@ def build_release(
         zip_path=zip_path,
         include_runtime_bundle=include_runtime_bundle,
         include_evidence=include_evidence,
+        include_melo_runtime_bundle=include_melo_runtime_bundle,
+        include_melo_evidence=include_melo_evidence,
         included_items=included_items,
     )
     create_zip_archive(release_dir=release_dir, zip_path=zip_path)
@@ -299,6 +357,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Include artifacts/runtime/sherpa_onnx_rk3588_runtime/output",
     )
+    parser.add_argument(
+        "--include-melo-runtime-bundle",
+        "--IncludeMeloRuntimeBundle",
+        action="store_true",
+        help="Include artifacts/runtime/melotts_rknn2_runtime.tar.gz",
+    )
+    parser.add_argument(
+        "--include-melo-evidence",
+        "--IncludeMeloEvidence",
+        action="store_true",
+        help="Include artifacts/runtime/melotts_rknn2_runtime/output",
+    )
     return parser.parse_args(argv)
 
 
@@ -312,6 +382,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             release_notes_path=args.release_notes_path or None,
             include_runtime_bundle=args.include_runtime_bundle,
             include_evidence=args.include_evidence,
+            include_melo_runtime_bundle=args.include_melo_runtime_bundle,
+            include_melo_evidence=args.include_melo_evidence,
         )
     except ReleasePackagingError as exc:
         print(str(exc), file=sys.stderr)
