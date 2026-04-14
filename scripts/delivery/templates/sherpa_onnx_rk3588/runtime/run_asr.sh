@@ -17,7 +17,13 @@ if [ "$#" -eq 0 ]; then
     if [ -n "$first_wav" ]; then
         set -- "$first_wav"
     else
-        set -- "$streaming_rknn_model_dir/test_wavs/DEV_T0000000000.wav"
+        first_test_wav="$(find "$streaming_rknn_model_dir/test_wavs" -maxdepth 1 -name '*.wav' -type f 2>/dev/null | sort | head -1)"
+        if [ -n "$first_test_wav" ]; then
+            set -- "$first_test_wav"
+        else
+            echo "No input wav found under ./audios or ./models/.../test_wavs" >&2
+            exit 1
+        fi
     fi
 fi
 

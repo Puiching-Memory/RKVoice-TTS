@@ -13,12 +13,9 @@ mkdir -p "$RUNTIME_DIR/output"
 
 if [ "$#" -eq 0 ]; then
     audios_dir="$RUNTIME_DIR/audios"
-    wav_args=()
-    if [ -d "$audios_dir" ]; then
-        while IFS= read -r f; do wav_args+=("$f"); done < <(find "$audios_dir" -maxdepth 1 -name '*.wav' -type f | sort)
-    fi
-    if [ "${#wav_args[@]}" -gt 0 ]; then
-        set -- "${wav_args[@]}"
+    first_wav="$(find "$audios_dir" -maxdepth 1 -name '*.wav' -type f 2>/dev/null | sort | head -1)"
+    if [ -n "$first_wav" ]; then
+        set -- "$first_wav"
     fi
 fi
 

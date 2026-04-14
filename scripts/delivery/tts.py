@@ -17,6 +17,7 @@ from .config import (
     TTS_ARTIFACTS,
     TTS_DEFAULT_CACHE_DIR,
     TTS_DIRECT_FILES,
+    TTS_RUNTIME_SUBDIR_NAME,
     TTS_RUNTIME_BOARD_PROFILE_CAPABILITIES_SH,
     TTS_RUNTIME_CHECK_PYTHON_ENV_SH,
     TTS_RUNTIME_INSTALL_PYTHON_DEPS_SH,
@@ -24,6 +25,7 @@ from .config import (
     TTS_RUNTIME_README,
     TTS_RUNTIME_RUN_SH,
     TTS_RUNTIME_SMOKETEST_SH,
+    UNIFIED_RUNTIME_README,
     WHEELHOUSE_RELATIVE_PATH,
     Artifact,
     DirectFile,
@@ -224,17 +226,27 @@ ROOT_FILES = (
 )
 
 
-def materialize_runtime_support_files(runtime_dir: Path) -> None:
+def runtime_component_dir(runtime_dir: Path) -> Path:
+    return runtime_dir / TTS_RUNTIME_SUBDIR_NAME
+
+
+def materialize_runtime_root(runtime_dir: Path) -> Path:
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    tools_dir = runtime_dir / "tools"
-    output_dir = runtime_dir / "output"
-    bin_dir = runtime_dir / "bin"
+    write_text(runtime_dir / "README_SDK.md", UNIFIED_RUNTIME_README)
+    return runtime_component_dir(runtime_dir)
+
+
+def materialize_runtime_support_files(runtime_dir: Path) -> None:
+    component_dir = materialize_runtime_root(runtime_dir)
+    tools_dir = component_dir / "tools"
+    output_dir = component_dir / "output"
+    bin_dir = component_dir / "bin"
     tools_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
     bin_dir.mkdir(parents=True, exist_ok=True)
-    write_text(runtime_dir / "README_SDK.md", TTS_RUNTIME_README)
-    write_text(runtime_dir / "run_tts.sh", TTS_RUNTIME_RUN_SH)
-    write_text(runtime_dir / "smoketest.sh", TTS_RUNTIME_SMOKETEST_SH)
+    write_text(component_dir / "README_SDK.md", TTS_RUNTIME_README)
+    write_text(component_dir / "run_tts.sh", TTS_RUNTIME_RUN_SH)
+    write_text(component_dir / "smoketest.sh", TTS_RUNTIME_SMOKETEST_SH)
     write_text(tools_dir / "board_profile_capabilities.sh", TTS_RUNTIME_BOARD_PROFILE_CAPABILITIES_SH)
     write_text(tools_dir / "check_python_env.sh", TTS_RUNTIME_CHECK_PYTHON_ENV_SH)
     write_text(tools_dir / "install_python_deps.sh", TTS_RUNTIME_INSTALL_PYTHON_DEPS_SH)
@@ -242,32 +254,34 @@ def materialize_runtime_support_files(runtime_dir: Path) -> None:
 
 
 def runtime_bundle_required_paths(runtime_dir: Path) -> tuple[Path, ...]:
+    component_dir = runtime_component_dir(runtime_dir)
     return (
-        runtime_dir / "melotts_rknn.py",
-        runtime_dir / "utils.py",
-        runtime_dir / "requirements.txt",
-        runtime_dir / "encoder.onnx",
-        runtime_dir / "decoder.rknn",
-        runtime_dir / "g.bin",
-        runtime_dir / "lexicon.txt",
-        runtime_dir / "tokens.txt",
-        runtime_dir / "english_utils",
-        runtime_dir / "text",
-        runtime_dir / "wheels",
-        runtime_dir / "run_tts.sh",
-        runtime_dir / "smoketest.sh",
-        runtime_dir / "tools" / "install_python_deps.sh",
+        component_dir / "melotts_rknn.py",
+        component_dir / "utils.py",
+        component_dir / "requirements.txt",
+        component_dir / "encoder.onnx",
+        component_dir / "decoder.rknn",
+        component_dir / "g.bin",
+        component_dir / "lexicon.txt",
+        component_dir / "tokens.txt",
+        component_dir / "english_utils",
+        component_dir / "text",
+        component_dir / "wheels",
+        component_dir / "run_tts.sh",
+        component_dir / "smoketest.sh",
+        component_dir / "tools" / "install_python_deps.sh",
     )
 
 
 def build_runtime_bundle(stage_dir: Path, runtime_dir: Path, *, force: bool) -> Path:
-    if force and runtime_dir.exists():
-        shutil.rmtree(runtime_dir)
+    component_dir = runtime_component_dir(runtime_dir)
+    if force and component_dir.exists():
+        shutil.rmtree(component_dir)
 
     required_runtime_paths = runtime_bundle_required_paths(runtime_dir)
     if all(path.exists() for path in required_runtime_paths):
         materialize_runtime_support_files(runtime_dir)
-        log(f"Reusing existing runtime bundle: {runtime_dir}")
+        log(f"Reusing existing TTS runtime component: {component_dir}")
         return runtime_dir
 
     source_dir = stage_dir / SOURCE_ROOT_RELATIVE_PATH
@@ -280,24 +294,24 @@ def build_runtime_bundle(stage_dir: Path, runtime_dir: Path, *, force: bool) -> 
         if not required_path.exists():
             fail(f"Source bundle is missing required content: {required_path}")
 
-    if runtime_dir.exists():
-        shutil.rmtree(runtime_dir)
-    runtime_dir.mkdir(parents=True, exist_ok=True)
+    if component_dir.exists():
+        shutil.rmtree(component_dir)
+    component_dir.mkdir(parents=True, exist_ok=True)
 
     for file_name in ROOT_FILES:
-        shutil.copy2(source_dir / file_name, runtime_dir / file_name)
-    merge_tree(source_dir / "english_utils", runtime_dir / "english_utils")
-    merge_tree(source_dir / "text", runtime_dir / "text")
-    merge_tree(stage_dir / WHEELHOUSE_RELATIVE_PATH, runtime_dir / "wheels")
-    (runtime_dir / "output").mkdir(parents=True, exist_ok=True)
-    (runtime_dir / "bin").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_dir / file_name, component_dir / file_name)
+    merge_tree(source_dir / "english_utils", component_dir / "english_utils")
+    merge_tree(source_dir / "text", component_dir / "text")
+    merge_tree(stage_dir / WHEELHOUSE_RELATIVE_PATH, component_dir / "wheels")
+    (component_dir / "output").mkdir(parents=True, exist_ok=True)
+    (component_dir / "bin").mkdir(parents=True, exist_ok=True)
 
     materialize_runtime_support_files(runtime_dir)
 
     for required_path in required_runtime_paths:
         if not required_path.exists():
             fail(f"Runtime bundle is missing required artifact after assembly: {required_path}")
-    log(f"Runtime bundle prepared at {runtime_dir}")
+    log(f"TTS runtime component prepared at {component_dir}")
     return runtime_dir
 
 
@@ -325,11 +339,13 @@ def deploy_runtime_bundle(
 
     materialize_runtime_support_files(runtime_dir)
 
+    component_dir = runtime_component_dir(runtime_dir)
+    component_remote_dir = f"{remote_dir.rstrip('/')}/{TTS_RUNTIME_SUBDIR_NAME}"
     client = open_ssh_client(host, username, password, source_ip=source_ip, timeout=ssh_timeout)
-    local_output_dir = runtime_dir / "output"
+    local_output_dir = component_dir / "output"
     local_output_dir.mkdir(parents=True, exist_ok=True)
-    tarball_path = create_bundle_tarball(runtime_dir, remote_dir)
-    remote_parent = str(Path(remote_dir).parent).replace("\\", "/")
+    tarball_path = create_bundle_tarball(component_dir, component_remote_dir)
+    remote_parent = str(Path(component_remote_dir).parent).replace("\\", "/")
     remote_tarball = f"{remote_parent}/{Path(tarball_path.name).name}"
     try:
         log(f"Uploading runtime tarball to {remote_tarball}")
@@ -337,19 +353,19 @@ def deploy_runtime_bundle(
         upload_file(client, tarball_path, remote_tarball)
         run_remote_command(
             client,
-            f"rm -rf {sh_quote(remote_dir)} && tar -xzf {sh_quote(remote_tarball)} -C {sh_quote(remote_parent)}",
+            f"rm -rf {sh_quote(component_remote_dir)} && tar -xzf {sh_quote(remote_tarball)} -C {sh_quote(remote_parent)}",
             timeout=remote_timeout,
         )
         run_remote_command(
             client,
-            f"find {sh_quote(remote_dir)} -type f \\( -name '*.sh' -o -name '*.py' \\) -exec chmod +x {{}} +",
+            f"find {sh_quote(component_remote_dir)} -type f \\( -name '*.sh' -o -name '*.py' \\) -exec chmod +x {{}} +",
             timeout=remote_timeout,
         )
         if install_python_deps:
             log("Installing board-side Python dependencies")
             install_output = run_remote_command(
                 client,
-                f"cd {sh_quote(remote_dir)} && ./tools/install_python_deps.sh",
+                f"cd {sh_quote(component_remote_dir)} && ./tools/install_python_deps.sh",
                 timeout=remote_timeout,
             )
             write_text(local_output_dir / "python_deps_install.log", install_output)
@@ -364,12 +380,12 @@ def deploy_runtime_bundle(
             )
             smoke_test_output = run_remote_command(
                 client,
-                f"cd {sh_quote(remote_dir)} && bash -lc {sh_quote(smoke_test_command)}",
+                f"cd {sh_quote(component_remote_dir)} && bash -lc {sh_quote(smoke_test_command)}",
                 timeout=remote_timeout,
             )
             local_log_path = local_output_dir / "smoke_test_summary.log"
             write_text(local_log_path, smoke_test_output)
-            remote_output_dir = f"{remote_dir.rstrip('/')}/output"
+            remote_output_dir = f"{component_remote_dir.rstrip('/')}/output"
             local_wav_path = local_output_dir / "smoke_test_tts.wav"
             download_file(client, f"{remote_output_dir}/smoke_test_tts.wav", local_wav_path)
             download_file(client, f"{remote_output_dir}/smoke_test_summary.log", local_log_path)

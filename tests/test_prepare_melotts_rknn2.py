@@ -38,21 +38,23 @@ class MeloTtsDeliveryTests(WorkspaceTestCase):
     def test_materialize_runtime_support_files_writes_runtime_layout(self) -> None:
         with self.temp_dir("rkvoice_melo_runtime_") as temp_dir:
             runtime_dir = temp_dir / "runtime"
+            tts_runtime_dir = runtime_dir / "tts"
 
             materialize_runtime_support_files(runtime_dir)
 
             self.assertTrue((runtime_dir / "README_SDK.md").exists())
-            self.assertTrue((runtime_dir / "run_tts.sh").exists())
-            self.assertTrue((runtime_dir / "smoketest.sh").exists())
-            self.assertTrue((runtime_dir / "tools" / "board_profile_capabilities.sh").exists())
-            self.assertTrue((runtime_dir / "tools" / "check_python_env.sh").exists())
-            self.assertTrue((runtime_dir / "tools" / "install_python_deps.sh").exists())
-            self.assertTrue((runtime_dir / "tools" / "profile_tts_inference.sh").exists())
+            self.assertTrue((tts_runtime_dir / "README_SDK.md").exists())
+            self.assertTrue((tts_runtime_dir / "run_tts.sh").exists())
+            self.assertTrue((tts_runtime_dir / "smoketest.sh").exists())
+            self.assertTrue((tts_runtime_dir / "tools" / "board_profile_capabilities.sh").exists())
+            self.assertTrue((tts_runtime_dir / "tools" / "check_python_env.sh").exists())
+            self.assertTrue((tts_runtime_dir / "tools" / "install_python_deps.sh").exists())
+            self.assertTrue((tts_runtime_dir / "tools" / "profile_tts_inference.sh").exists())
 
-            run_script = (runtime_dir / "run_tts.sh").read_text(encoding="utf-8")
-            smoketest = (runtime_dir / "smoketest.sh").read_text(encoding="utf-8")
-            install_script = (runtime_dir / "tools" / "install_python_deps.sh").read_text(encoding="utf-8")
-            profile_script = (runtime_dir / "tools" / "profile_tts_inference.sh").read_text(encoding="utf-8")
+            run_script = (tts_runtime_dir / "run_tts.sh").read_text(encoding="utf-8")
+            smoketest = (tts_runtime_dir / "smoketest.sh").read_text(encoding="utf-8")
+            install_script = (tts_runtime_dir / "tools" / "install_python_deps.sh").read_text(encoding="utf-8")
+            profile_script = (tts_runtime_dir / "tools" / "profile_tts_inference.sh").read_text(encoding="utf-8")
             self.assertIn("melotts_rknn.py", run_script)
             self.assertIn("RKVOICE_TTS_OUTPUT_WAV", run_script)
             self.assertIn("decoder.rknn", run_script)
@@ -67,18 +69,20 @@ class MeloTtsDeliveryTests(WorkspaceTestCase):
         with self.temp_dir("rkvoice_melo_bundle_") as temp_dir:
             stage_dir = temp_dir / "stage"
             runtime_dir = temp_dir / "runtime"
+            tts_runtime_dir = runtime_dir / "tts"
             self._create_stage_bundle(stage_dir)
 
             build_runtime_bundle(stage_dir, runtime_dir, force=False)
 
-            self.assertTrue((runtime_dir / "melotts_rknn.py").exists())
-            self.assertTrue((runtime_dir / "utils.py").exists())
-            self.assertTrue((runtime_dir / "encoder.onnx").exists())
-            self.assertTrue((runtime_dir / "decoder.rknn").exists())
-            self.assertTrue((runtime_dir / "english_utils" / "__init__.py").exists())
-            self.assertTrue((runtime_dir / "text" / "__init__.py").exists())
-            self.assertTrue((runtime_dir / "wheels" / "pip-26.0.1-py3-none-any.whl").exists())
-            self.assertTrue((runtime_dir / "wheels" / "rknn_toolkit_lite2-2.3.2-cp310-cp310-manylinux2014_aarch64.whl").exists())
-            self.assertTrue((runtime_dir / "run_tts.sh").exists())
-            self.assertTrue((runtime_dir / "smoketest.sh").exists())
-            self.assertTrue((runtime_dir / "output").exists())
+            self.assertTrue((runtime_dir / "README_SDK.md").exists())
+            self.assertTrue((tts_runtime_dir / "melotts_rknn.py").exists())
+            self.assertTrue((tts_runtime_dir / "utils.py").exists())
+            self.assertTrue((tts_runtime_dir / "encoder.onnx").exists())
+            self.assertTrue((tts_runtime_dir / "decoder.rknn").exists())
+            self.assertTrue((tts_runtime_dir / "english_utils" / "__init__.py").exists())
+            self.assertTrue((tts_runtime_dir / "text" / "__init__.py").exists())
+            self.assertTrue((tts_runtime_dir / "wheels" / "pip-26.0.1-py3-none-any.whl").exists())
+            self.assertTrue((tts_runtime_dir / "wheels" / "rknn_toolkit_lite2-2.3.2-cp310-cp310-manylinux2014_aarch64.whl").exists())
+            self.assertTrue((tts_runtime_dir / "run_tts.sh").exists())
+            self.assertTrue((tts_runtime_dir / "smoketest.sh").exists())
+            self.assertTrue((tts_runtime_dir / "output").exists())

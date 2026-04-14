@@ -26,7 +26,7 @@ RUN python -m pip install --no-cache-dir \
         "tqdm>=4.64.1" \
         "fast-histogram>=0.11" \
         "numpy<=1.26.4" \
-        "onnx>=1.16.1" \
+    "onnx==1.16.1" \
         "onnxruntime>=1.17.0" \
         "opencv-python-headless>=4.5.5.64" \
     && python -m pip install --no-cache-dir --no-deps rknn-toolkit2==2.3.2

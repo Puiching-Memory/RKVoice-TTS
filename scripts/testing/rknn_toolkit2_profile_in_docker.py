@@ -23,8 +23,8 @@ DEFAULT_CONTAINER_WORKSPACE = Path("/workspace")
 DEFAULT_DOCKERFILE = WORKSPACE_ROOT / "docker" / "toolkit2-profile" / "Dockerfile"
 DEFAULT_BUILD_CONTEXT = DEFAULT_DOCKERFILE.parent
 DEFAULT_BOARD_PREPARE_SCRIPT = WORKSPACE_ROOT / "scripts" / "board" / "prepare_rknn_debug_bridge.py"
-DEFAULT_MODEL_RELATIVE_PATH = Path("models") / "asr" / "rknn" / "sense-voice-rk3588-20s" / "model.rknn"
-DEFAULT_OUTPUT_RELATIVE_PATH = Path("output")
+DEFAULT_MODEL_RELATIVE_PATH = Path("asr") / "models" / "asr" / "rknn" / "sense-voice-rk3588-20s" / "model.rknn"
+DEFAULT_OUTPUT_RELATIVE_PATH = Path("asr") / "output"
 
 
 class DockerToolkit2Error(Exception):
@@ -190,7 +190,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     runtime_dir = resolve_path_option(
         parsed.runtime_dir,
-        env_names=("RKVOICE_RUNTIME_DIR", "TTS_RUNTIME_DIR"),
+        env_names=("RKVOICE_RUNTIME_DIR", "RKVOICE_ASR_RUNTIME_DIR"),
         local_settings=local_settings,
         default=DEFAULT_RUNTIME_DIR,
     )

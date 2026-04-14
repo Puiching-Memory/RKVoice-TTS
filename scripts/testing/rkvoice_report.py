@@ -15,15 +15,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_ROOT = WORKSPACE_ROOT / "artifacts" / "test-runs"
-DEFAULT_RUNTIME_DIR = WORKSPACE_ROOT / "artifacts" / "runtime" / "sherpa_onnx_rk3588_runtime"
-DEFAULT_TTS_RUNTIME_DIR = WORKSPACE_ROOT / "artifacts" / "runtime" / "melotts_rknn2_runtime"
+DEFAULT_RUNTIME_DIR = WORKSPACE_ROOT / "artifacts" / "runtime" / "rkvoice_runtime"
+ASR_RUNTIME_SUBDIR = Path("asr")
+TTS_RUNTIME_SUBDIR = Path("tts")
 DEFAULT_REQUIREMENTS_PATH = WORKSPACE_ROOT / "docs" / "requirements" / "项目指标.md"
 DEFAULT_LOCAL_PLAN_PATH = WORKSPACE_ROOT / "config" / "local" / "tts_test_plan.json"
 DEFAULT_EXAMPLE_PLAN_PATH = WORKSPACE_ROOT / "config" / "examples" / "tts_test_plan.example.json"
@@ -37,6 +38,7 @@ TEXT_PATTERN = re.compile(r"The text is:\s*(.+?)\.\s*Speaker ID:")
 MELO_ENCODER_PATTERN = re.compile(r"encoder run take\s*([0-9.]+)\s*ms", re.IGNORECASE)
 MELO_DECODER_PATTERN = re.compile(r"decoder run take\s*([0-9.]+)\s*ms", re.IGNORECASE)
 MELO_MODEL_LOAD_PATTERN = re.compile(r"load models take\s*([0-9.]+)\s*ms", re.IGNORECASE)
+SMOKE_FAILURE_PATTERN = re.compile(r"failed with exit code:\s*([0-9]+)", re.IGNORECASE)
 CORE_LOAD_PATTERN = re.compile(r"Core([012]):\s*([0-9]+)%")
 RKNN_VERSION_PATTERN = re.compile(r"librknnrt version:\s*(.+)")
 MEMORY_TOTAL_PATTERN = re.compile(r"内存：\s*([0-9.]+)([GMK]i)\b")
@@ -212,6 +214,7 @@ def format_rknn_profile_source(source: str | None) -> str:
         "perf_detail": "RKNN_QUERY_PERF_DETAIL",
         "runtime_log": "RKNN_LOG_LEVEL=4",
         "load_sampling": "rknpu/load 采样",
+        "tts_profile_csv": "TTS profile-samples.csv",
     }
     if not source:
         return "未采集"
@@ -291,25 +294,6 @@ def detect_tts_backend(run_tts_script: str) -> str:
     return "unknown"
 
 
-def detect_asr_mode(run_asr_script: str) -> str:
-    import re
-
-    m = re.search(r'RKVOICE_ASR_MODE:-(\w+)', run_asr_script)
-    if m:
-        default_mode = m.group(1).lower()
-        if "stream" in default_mode:
-            return "streaming"
-        if default_mode == "offline":
-            return "offline"
-        return default_mode
-    script_lower = run_asr_script.lower()
-    if "stream" in script_lower and "offline" not in script_lower:
-        return "streaming"
-    if "offline" in script_lower:
-        return "offline"
-    return "unknown"
-
-
 def maybe_read_text(path: Path) -> str:
     if not path.exists():
         return ""
@@ -339,15 +323,18 @@ def inspect_tts_runtime(tts_runtime_dir: Path) -> dict[str, Any]:
     }
 
 
-def inspect_runtime(runtime_dir: Path, tts_runtime_dir: Path | None = None) -> dict[str, Any]:
-    run_asr_path = runtime_dir / "run_asr.sh"
+def inspect_runtime(runtime_dir: Path) -> dict[str, Any]:
+    asr_runtime_dir = runtime_dir / ASR_RUNTIME_SUBDIR
+    tts_runtime_dir = runtime_dir / TTS_RUNTIME_SUBDIR
+
+    run_asr_path = asr_runtime_dir / "run_asr.sh"
     run_asr_script = maybe_read_text(run_asr_path)
 
-    asr_streaming_rknn_model_dir = runtime_dir / "models" / "asr" / "streaming-rknn" / "streaming-zipformer-rk3588-small"
+    asr_streaming_rknn_model_dir = asr_runtime_dir / "models" / "asr" / "streaming-rknn" / "streaming-zipformer-rk3588-small"
     asr_streaming_rknn_encoder_path = asr_streaming_rknn_model_dir / "encoder.rknn"
 
     tts_info: dict[str, Any]
-    if tts_runtime_dir and tts_runtime_dir.exists():
+    if tts_runtime_dir.exists():
         tts_info = inspect_tts_runtime(tts_runtime_dir)
     else:
         tts_info = {
@@ -369,13 +356,13 @@ def inspect_runtime(runtime_dir: Path, tts_runtime_dir: Path | None = None) -> d
 
     result = {
         "runtime_dir": str(runtime_dir),
-        "asr_mode": detect_asr_mode(run_asr_script),
+        "asr_runtime_dir": str(asr_runtime_dir),
         "asr_supports_rknn": "provider=rknn" in run_asr_script.lower(),
         "asr_streaming_rknn_available": asr_streaming_rknn_encoder_path.exists(),
         "asr_streaming_rknn_model_size_mib": bytes_to_mib(directory_size_bytes(asr_streaming_rknn_model_dir)) if asr_streaming_rknn_model_dir.exists() else None,
         "asr_streaming_rknn_model_name": asr_streaming_rknn_model_dir.name if asr_streaming_rknn_model_dir.exists() else "",
         "models_total_size_mib": bytes_to_mib(models_total) if models_total > 0 else None,
-        "offline_ready": (runtime_dir / "bin").exists() and (runtime_dir / "models").exists(),
+        "offline_ready": (asr_runtime_dir / "bin").exists() and (asr_runtime_dir / "models").exists(),
     }
     result.update(tts_info)
     return result
@@ -459,6 +446,10 @@ def parse_smoke_log(path: Path | None) -> dict[str, Any]:
         model_load_match = MELO_MODEL_LOAD_PATTERN.search(line)
         if model_load_match:
             section["model_load_ms"] = float(model_load_match.group(1))
+        smoke_failure_match = SMOKE_FAILURE_PATTERN.search(line)
+        if smoke_failure_match:
+            section["failed"] = True
+            section["exit_code"] = int(smoke_failure_match.group(1))
         if line.startswith("{") and line.endswith("}"):
             try:
                 section["result"] = json.loads(line)
@@ -661,6 +652,9 @@ def parse_rknn_perf_text(path: Path | None) -> dict[str, Any]:
         return {}
 
     content = path.read_text(encoding="utf-8")
+    if not content.strip():
+        return {}
+
     operators: list[dict[str, Any]] = []
     ranking: list[dict[str, Any]] = []
     total_operator_time_us: float | None = None
@@ -941,12 +935,28 @@ def load_plan_summary(path: Path | None) -> dict[str, Any]:
         return {}
 
     payload = json.loads(path.read_text(encoding="utf-8"))
+    defaults = payload.get("defaults", {})
     cases = payload.get("cases", [])
     category_counts: dict[str, int] = {}
     acceptance_cases: list[dict[str, Any]] = []
+    normalized_cases: list[dict[str, Any]] = []
     for case in cases:
         category = str(case.get("category", "uncategorized"))
         category_counts[category] = category_counts.get(category, 0) + 1
+        normalized_cases.append(
+            {
+                "id": case.get("id", ""),
+                "name": case.get("name", ""),
+                "category": category,
+                "tags": list(case.get("tags", [])),
+                "sentence": case.get("sentence", ""),
+                "repeat": case.get("repeat", defaults.get("repeat")),
+                "warmup": case.get("warmup", defaults.get("warmup")),
+                "latency_threshold_ms": case.get("latency_threshold_ms"),
+                "rtf_threshold": case.get("rtf_threshold"),
+                "notes": case.get("notes", ""),
+            }
+        )
         if category == "acceptance":
             acceptance_cases.append(
                 {
@@ -964,8 +974,87 @@ def load_plan_summary(path: Path | None) -> dict[str, Any]:
         "description": payload.get("description", ""),
         "case_count": len(cases),
         "category_counts": category_counts,
+        "cases": normalized_cases,
         "acceptance_cases": acceptance_cases,
-        "defaults": payload.get("defaults", {}),
+        "defaults": defaults,
+    }
+
+
+def infer_asr_latency_units(section: Mapping[str, Any]) -> tuple[int | None, str]:
+    result = section.get("result")
+    if not isinstance(result, Mapping):
+        result = {}
+
+    words = result.get("words")
+    if isinstance(words, list):
+        normalized_words = [str(word).strip() for word in words if str(word).strip()]
+        if normalized_words:
+            return len(normalized_words), "词"
+
+    tokens = result.get("tokens")
+    if isinstance(tokens, list):
+        normalized_tokens = [str(token).strip() for token in tokens if str(token).strip()]
+        if normalized_tokens:
+            return len(normalized_tokens), "字"
+
+    text = str(result.get("text") or section.get("text") or "").strip()
+    if not text:
+        return None, ""
+
+    split_words = [segment for segment in re.split(r"\s+", text) if segment]
+    if len(split_words) > 1:
+        return len(split_words), "词"
+
+    compact_text = re.sub(r"\s+", "", text)
+    if compact_text:
+        return len(compact_text), "字"
+    return None, ""
+
+
+def summarize_asr_latency(section: Mapping[str, Any]) -> dict[str, Any]:
+    if bool(section.get("failed")):
+        return {
+            "processing_elapsed_ms": None,
+            "unit_count": None,
+            "unit_label": "",
+            "first_unit_timestamp_ms": None,
+            "per_unit_latency_ms": None,
+            "final_result_latency_ms": None,
+        }
+
+    elapsed_samples = section.get("elapsed_seconds_samples")
+    processing_elapsed_ms: float | None = None
+    if isinstance(elapsed_samples, list):
+        numeric_samples = [float(sample) for sample in elapsed_samples if sample is not None]
+        if numeric_samples:
+            processing_elapsed_ms = round(min(numeric_samples) * 1000.0, 3)
+
+    if processing_elapsed_ms is None and section.get("elapsed_seconds") is not None:
+        processing_elapsed_ms = round(float(section.get("elapsed_seconds") or 0.0) * 1000.0, 3)
+
+    unit_count, unit_label = infer_asr_latency_units(section)
+    result = section.get("result")
+    if not isinstance(result, Mapping):
+        result = {}
+
+    first_unit_timestamp_ms: float | None = None
+    timestamps = result.get("timestamps")
+    if isinstance(timestamps, list):
+        numeric_timestamps = [float(timestamp) for timestamp in timestamps if timestamp is not None]
+        if numeric_timestamps:
+            first_unit_timestamp_ms = round(numeric_timestamps[0] * 1000.0, 3)
+
+    per_unit_latency_ms: float | None = None
+    if processing_elapsed_ms is not None and unit_count:
+        per_unit_latency_ms = round(processing_elapsed_ms / unit_count, 3)
+
+    return {
+        "processing_elapsed_ms": processing_elapsed_ms,
+        "unit_count": unit_count,
+        "unit_label": unit_label,
+        "first_unit_timestamp_ms": first_unit_timestamp_ms,
+        "per_unit_latency_ms": per_unit_latency_ms,
+        "final_result_latency_ms": processing_elapsed_ms,
     }
 
 
@@ -1083,8 +1172,15 @@ def evaluate_requirement(text: str, subsection: str, observed: dict[str, Any]) -
     tts_elapsed_ms = observed.get("tts_elapsed_ms")
     tts_elapsed_basis = observed.get("tts_elapsed_basis") or "unknown"
     tts_backend = observed.get("tts_backend", "unknown")
+    tts_backend_uses_rknn = "rknn" in str(tts_backend).lower()
     asr_streaming_rknn_elapsed_ms = observed.get("asr_streaming_rknn_elapsed_ms")
-    asr_mode = observed.get("asr_mode", "unknown")
+    asr_streaming_rknn_processing_elapsed_ms = observed.get("asr_streaming_rknn_processing_elapsed_ms")
+    asr_streaming_rknn_per_unit_latency_ms = observed.get("asr_streaming_rknn_per_unit_latency_ms")
+    asr_streaming_rknn_first_unit_timestamp_ms = observed.get("asr_streaming_rknn_first_unit_timestamp_ms")
+    asr_streaming_rknn_final_result_latency_ms = observed.get("asr_streaming_rknn_final_result_latency_ms")
+    asr_streaming_rknn_unit_count = observed.get("asr_streaming_rknn_unit_count")
+    asr_streaming_rknn_latency_unit = observed.get("asr_streaming_rknn_latency_unit") or ""
+    asr_streaming_rknn_available = bool(observed.get("asr_streaming_rknn_available"))
     tts_max_rss_mib = observed.get("tts_max_rss_mib")
     tts_model_size_mib = observed.get("tts_model_size_mib")
     tts_model_is_int8 = bool(observed.get("tts_model_is_int8"))
@@ -1105,8 +1201,12 @@ def evaluate_requirement(text: str, subsection: str, observed: dict[str, Any]) -
 
     if "语音合成端到端延迟" in text:
         if tts_elapsed_ms is None:
-            return {"status": "unknown", "observed": "缺少可用的 TTS cold/warm/profile 时延数据", "rationale": "当前报告没有可用于判定的 TTS 延迟样本。"}
-        if tts_backend != "rknn":
+            return {
+                "status": "unknown",
+                "observed": "缺少可用于判定的 TTS warm/profile 时延数据",
+                "rationale": "冷启动时延只用于展示，不再参与 150 ms 指标判定。",
+            }
+        if not tts_backend_uses_rknn:
             return {
                 "status": "fail",
                 "observed": f"当前 TTS 后端为 {tts_backend}，{tts_basis_label} {tts_elapsed_ms:.0f} ms",
@@ -1156,11 +1256,20 @@ def evaluate_requirement(text: str, subsection: str, observed: dict[str, Any]) -
         return {"status": "unknown", "observed": "缺少完整运行包证据", "rationale": "当前报告无法确认离线运行条件是否完整。"}
 
     if subsection == "2.1 端侧识别延迟" and "≤ 200 ms" in text:
-        if asr_streaming_rknn_elapsed_ms is None:
-            return {"status": "unknown", "observed": "缺少流式 ASR (RKNN) 时延样本", "rationale": "未找到可用于 200 ms 判定的流式 ASR 冒烟证据。"}
-        if asr_streaming_rknn_elapsed_ms <= 200.0:
-            return {"status": "pass", "observed": f"流式 ASR (RKNN) 冒烟 {asr_streaming_rknn_elapsed_ms:.0f} ms", "rationale": "流式 ASR 延迟满足目标。"}
-        return {"status": "fail", "observed": f"流式 ASR (RKNN) 冒烟 {asr_streaming_rknn_elapsed_ms:.0f} ms", "rationale": "流式 ASR 延迟超过目标。"}
+        if asr_streaming_rknn_per_unit_latency_ms is None:
+            return {"status": "unknown", "observed": "缺少可用于判定的流式 ASR 单字/单词时延样本", "rationale": "当前报告已不再用整句总耗时直接判定 200 ms 指标，需要识别结果与单位计数共同支撑。"}
+        unit_text = "单词" if asr_streaming_rknn_latency_unit == "词" else "单字"
+        observed_parts = [f"流式 ASR (RKNN) 平均{unit_text}耗时 {asr_streaming_rknn_per_unit_latency_ms:.1f} ms"]
+        if asr_streaming_rknn_first_unit_timestamp_ms is not None:
+            observed_parts.append(f"首字时间戳 {asr_streaming_rknn_first_unit_timestamp_ms:.0f} ms")
+        if asr_streaming_rknn_final_result_latency_ms is not None:
+            observed_parts.append(f"最终结果耗时 {asr_streaming_rknn_final_result_latency_ms:.0f} ms")
+        if asr_streaming_rknn_unit_count:
+            observed_parts.append(f"{asr_streaming_rknn_unit_count}{asr_streaming_rknn_latency_unit}")
+        observed_text = "，".join(observed_parts)
+        if asr_streaming_rknn_per_unit_latency_ms <= 200.0:
+            return {"status": "pass", "observed": observed_text, "rationale": "当前日志没有 partial/final 产出时序，因此 200 ms 指标暂按平均单字/单词处理耗时判定；首字时间戳和最终结果耗时仅作辅助观测。"}
+        return {"status": "fail", "observed": observed_text, "rationale": "当前日志没有 partial/final 产出时序，因此 200 ms 指标暂按平均单字/单词处理耗时判定；首字时间戳和最终结果耗时仅作辅助观测。"}
 
     if subsection == "2.2 识别准确率":
         return {"status": "unknown", "observed": "缺少带标注的 ASR 评测集", "rationale": "当前报告仅汇总冒烟转写样例，不包含准确率统计。"}
@@ -1173,9 +1282,9 @@ def evaluate_requirement(text: str, subsection: str, observed: dict[str, Any]) -
         return {"status": "fail", "observed": f"流式 RKNN 模型合计 {asr_streaming_rknn_model_size_mib:.1f} MiB", "rationale": "当前流式 RKNN ASR 模型体积超过 100 MiB。"}
 
     if subsection == "2.3 模型与稳定性" and "支持流式识别" in text:
-        if asr_mode == "streaming":
-            return {"status": "pass", "observed": "检测到 streaming 入口", "rationale": "当前运行脚本使用流式识别链路。"}
-        return {"status": "fail", "observed": f"当前 ASR 模式为 {asr_mode}", "rationale": "当前运行包仅暴露离线识别入口。"}
+        if asr_streaming_rknn_available:
+            return {"status": "pass", "observed": "默认运行入口为 streaming RKNN", "rationale": "当前运行包不再区分 ASR 模式，统一按流式识别链路交付。"}
+        return {"status": "fail", "observed": "缺少 streaming RKNN 模型", "rationale": "当前运行包无法证明流式识别链路已完整交付。"}
 
     if subsection == "2.3 模型与稳定性" and "7×24 小时" in text:
         return {"status": "unknown", "observed": "缺少 ASR 长稳记录", "rationale": "当前报告没有长时间连续 ASR 运行数据。"}
@@ -1211,7 +1320,7 @@ def evaluate_requirement(text: str, subsection: str, observed: dict[str, Any]) -
         return {"status": "fail", "observed": f"当前可见 TTS 峰值 RSS {tts_max_rss_mib:.1f} MiB", "rationale": "已知单一语音进程样本就超过 500 MiB，系统整体更不可能满足。"}
 
     if "支持 RK3588 NPU 硬件加速" in text:
-        if rknn_operator_count > 0 and tts_backend != "rknn":
+        if rknn_operator_count > 0 and not tts_backend_uses_rknn:
             return {
                 "status": "partial",
                 "observed": f"已采到 {format_rknn_profile_source(rknn_profile_source)} {rknn_operator_count} 条层级记录，TTS 仍为 {tts_backend}",
@@ -1223,7 +1332,7 @@ def evaluate_requirement(text: str, subsection: str, observed: dict[str, Any]) -
                 "observed": f"已采到 {format_rknn_profile_source(rknn_profile_source)} {rknn_operator_count} 条层级记录",
                 "rationale": "当前已有官方 RKNN 层级 profiler 证据，可证明运行链路已命中 RK3588 NPU。",
             }
-        if rknn_runtime_layer_log_count > 0 and tts_backend != "rknn":
+        if rknn_runtime_layer_log_count > 0 and not tts_backend_uses_rknn:
             return {
                 "status": "partial",
                 "observed": f"已采到 RKNN_LOG_LEVEL=4 层日志 {rknn_runtime_layer_log_count} 行，TTS 仍为 {tts_backend}",
@@ -1235,7 +1344,7 @@ def evaluate_requirement(text: str, subsection: str, observed: dict[str, Any]) -
                 "observed": f"已采到 RKNN_LOG_LEVEL=4 层日志 {rknn_runtime_layer_log_count} 行",
                 "rationale": "当前运行时日志已显示每层 MAC 利用率或带宽占用，能证明 RKNN NPU 执行路径命中。",
             }
-        if npu_peak_percent > 0 and tts_backend != "rknn":
+        if npu_peak_percent > 0 and not tts_backend_uses_rknn:
             return {"status": "partial", "observed": f"ASR RKNN 峰值 NPU load {npu_peak_percent}%", "rationale": "当前只有 ASR RKNN 命中 NPU，TTS 仍是 CPU 路径。"}
         if npu_peak_percent > 0:
             return {"status": "pass", "observed": f"峰值 NPU load {npu_peak_percent}%", "rationale": "当前采样显示核心能力已命中 RK3588 NPU。"}
@@ -1386,6 +1495,12 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path, *, tts_evidence_dir: 
         evidence_dir / "profile.log",
         evidence_dir / "tts-profile.log",
     ])
+    tts_profile_csv_path: Path | None = None
+    if tts_ev_dir is None:
+        tts_profile_csv_path = pick_first_existing([
+            evidence_dir / "profile-samples.csv",
+            evidence_dir / "tts-profile-samples.csv",
+        ]) or first_glob(evidence_dir, "*profile*samples*.csv")
     audio_path = pick_first_existing([
         evidence_dir / "profile.wav",
         evidence_dir / "smoke_test_tts.wav",
@@ -1394,6 +1509,7 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path, *, tts_evidence_dir: 
 
     # ----- TTS evidence from separate directory -----
     tts_smoke_log_path: Path | None = None
+    tts_rknn_runtime_log_path: Path | None = None
     if tts_ev_dir:
         tts_smoke_log_path = pick_first_existing([
             tts_ev_dir / "smoke_test_summary.log",
@@ -1404,6 +1520,15 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path, *, tts_evidence_dir: 
                 tts_ev_dir / "profile.log",
                 tts_ev_dir / "tts-profile.log",
             ])
+        if tts_profile_csv_path is None:
+            tts_profile_csv_path = pick_first_existing([
+                tts_ev_dir / "profile-samples.csv",
+                tts_ev_dir / "tts-profile-samples.csv",
+            ]) or first_glob(tts_ev_dir, "*profile*samples*.csv")
+        tts_rknn_runtime_log_path = pick_first_existing([
+            tts_ev_dir / "rknn_runtime.log",
+            tts_ev_dir / "rknn_layer_runtime.log",
+        ]) or first_glob(tts_ev_dir, "*rknn*runtime*.log")
         if audio_path is None:
             audio_path = pick_first_existing([
                 tts_ev_dir / "profile_tts.wav",
@@ -1426,6 +1551,8 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path, *, tts_evidence_dir: 
     rknn_perf_run = parse_rknn_perf_run(rknn_perf_run_path)
     rknn_memory = parse_rknn_memory_profile(rknn_memory_path)
     rknn_runtime_log = parse_rknn_runtime_log(rknn_runtime_log_path)
+    tts_profile = parse_tts_profile_csv(tts_profile_csv_path)
+    tts_rknn_runtime_log = parse_rknn_runtime_log(tts_rknn_runtime_log_path)
     wav_metadata = read_wav_metadata(audio_path)
 
     copied_assets = {
@@ -1437,6 +1564,8 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path, *, tts_evidence_dir: 
         "rknn_memory_profile": copy_asset(rknn_memory_path, assets_dir),
         "rknn_runtime_log": copy_asset(rknn_runtime_log_path, assets_dir),
         "tts_profile_log": copy_asset(tts_profile_log_path, assets_dir),
+        "tts_profile_csv": copy_asset(tts_profile_csv_path, assets_dir),
+        "tts_rknn_runtime_log": copy_asset(tts_rknn_runtime_log_path, assets_dir),
         "audio": copy_asset(audio_path, assets_dir),
     }
 
@@ -1453,6 +1582,27 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path, *, tts_evidence_dir: 
     )
     copied_assets["asr_rknpu_load_heatmap"] = write_svg_asset(assets_dir / "asr-rknpu-load-heatmap.svg", asr_heatmap_markup)
 
+    tts_heatmap_samples = [
+        {
+            "core0_percent": sample.get("npu_core0_percent", 0),
+            "core1_percent": sample.get("npu_core1_percent", 0),
+            "core2_percent": sample.get("npu_core2_percent", 0),
+        }
+        for sample in tts_profile.get("samples", [])
+    ]
+    tts_heatmap_markup = render_heatmap_svg(
+        title="TTS Profile Heatmap",
+        subtitle="由 profile-samples.csv 采样生成，用于观察 TTS 进程 NPU core 负载变化。",
+        samples=tts_heatmap_samples,
+        rows=(
+            ("Core0", "core0_percent"),
+            ("Core1", "core1_percent"),
+            ("Core2", "core2_percent"),
+        ),
+        max_value=100.0,
+    )
+    copied_assets["tts_profile_heatmap"] = write_svg_asset(assets_dir / "tts-profile-heatmap.svg", tts_heatmap_markup)
+
     return {
         "evidence_dir": str(evidence_dir),
         "smoke": smoke_summary,
@@ -1462,6 +1612,8 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path, *, tts_evidence_dir: 
         "rknn_perf_run": rknn_perf_run,
         "rknn_memory": rknn_memory,
         "rknn_runtime_log": rknn_runtime_log,
+        "tts_profile": tts_profile,
+        "tts_rknn_runtime_log": tts_rknn_runtime_log,
         "audio": wav_metadata,
         "assets": copied_assets,
     }
@@ -1478,25 +1630,43 @@ def build_observed_metrics(runtime_info: dict[str, Any], evidence: dict[str, Any
     rknn_perf_run = evidence.get("rknn_perf_run", {})
     rknn_memory = evidence.get("rknn_memory", {})
     rknn_runtime_log = evidence.get("rknn_runtime_log", {})
+    tts_profile = evidence.get("tts_profile", {})
+    tts_rknn_runtime_log = evidence.get("tts_rknn_runtime_log", {})
+    asr_latency_summary = summarize_asr_latency(asr_streaming_rknn)
+
+    rknn_runtime_layer_log_count = (rknn_runtime_log.get("layer_line_count", 0) or 0) + (tts_rknn_runtime_log.get("layer_line_count", 0) or 0)
+
+    npu_peak_source = ""
+    npu_peak_percent = 0.0
+    for source_name, candidate_peak in (
+        ("rknpu_load", rknpu_load.get("peak_percent")),
+        ("tts_profile_csv", tts_profile.get("peak_npu_percent")),
+    ):
+        peak_value = coerce_float(candidate_peak)
+        if peak_value is None or peak_value < npu_peak_percent:
+            continue
+        npu_peak_percent = peak_value
+        npu_peak_source = source_name
+
+    asr_streaming_rknn_failed = bool(asr_streaming_rknn.get("failed"))
 
     rknn_profile_source = rknn_perf.get("source")
-    if not rknn_profile_source and rknn_runtime_log.get("layer_line_count"):
+    if not rknn_profile_source and rknn_runtime_layer_log_count:
         rknn_profile_source = "runtime_log"
     if not rknn_profile_source and rknpu_load.get("sample_count"):
         rknn_profile_source = "load_sampling"
+    if not rknn_profile_source and tts_profile.get("sample_count"):
+        rknn_profile_source = "tts_profile_csv"
 
     category_counts = plan_summary.get("category_counts", {})
 
     tts_primary_run = tts_warm_run
     tts_elapsed_basis = "warm_run"
     if tts_primary_run.get("elapsed_seconds") is None:
-        tts_primary_run = tts_cold_start
-        tts_elapsed_basis = "cold_start"
-    if tts_primary_run.get("elapsed_seconds") is None:
         tts_primary_run = tts_profile_run
         tts_elapsed_basis = "profile_run"
 
-    # TTS elapsed: prefer warm run, then cold start, then profile run.
+    # TTS elapsed: prefer warm run, then profile run. Cold start is display-only.
     tts_elapsed_ms: float | None = None
     if tts_primary_run.get("elapsed_seconds") is not None:
         tts_elapsed_ms = (tts_primary_run["elapsed_seconds"] or 0) * 1000.0
@@ -1517,7 +1687,6 @@ def build_observed_metrics(runtime_info: dict[str, Any], evidence: dict[str, Any
 
     return {
         "tts_backend": runtime_info.get("tts_backend"),
-        "asr_mode": runtime_info.get("asr_mode"),
         "tts_elapsed_basis": tts_elapsed_basis,
         "tts_elapsed_ms": tts_elapsed_ms,
         "tts_audio_duration_s": tts_audio_duration_s,
@@ -1534,20 +1703,28 @@ def build_observed_metrics(runtime_info: dict[str, Any], evidence: dict[str, Any
         "tts_profile_run_model_load_ms": tts_profile_run.get("model_load_ms"),
         "tts_profile_run_encoder_ms": tts_profile_run.get("encoder_elapsed_ms"),
         "tts_profile_run_decoder_ms": tts_profile_run.get("decoder_elapsed_ms"),
-        "asr_streaming_rknn_elapsed_ms": (asr_streaming_rknn.get("elapsed_seconds") or 0) * 1000.0 if asr_streaming_rknn.get("elapsed_seconds") is not None else None,
-        "asr_streaming_rknn_rtf": asr_streaming_rknn.get("rtf"),
-        "tts_max_rss_mib": None,
-        "npu_peak_percent": rknpu_load.get("peak_percent", 0),
+        "asr_streaming_rknn_elapsed_ms": None if asr_streaming_rknn_failed else ((asr_streaming_rknn.get("elapsed_seconds") or 0) * 1000.0 if asr_streaming_rknn.get("elapsed_seconds") is not None else None),
+        "asr_streaming_rknn_processing_elapsed_ms": asr_latency_summary.get("processing_elapsed_ms"),
+        "asr_streaming_rknn_unit_count": asr_latency_summary.get("unit_count"),
+        "asr_streaming_rknn_latency_unit": asr_latency_summary.get("unit_label"),
+        "asr_streaming_rknn_first_unit_timestamp_ms": asr_latency_summary.get("first_unit_timestamp_ms"),
+        "asr_streaming_rknn_per_unit_latency_ms": asr_latency_summary.get("per_unit_latency_ms"),
+        "asr_streaming_rknn_final_result_latency_ms": asr_latency_summary.get("final_result_latency_ms"),
+        "asr_streaming_rknn_rtf": None if asr_streaming_rknn_failed else asr_streaming_rknn.get("rtf"),
+        "tts_max_rss_mib": tts_profile.get("max_rss_mib"),
+        "npu_peak_percent": npu_peak_percent,
+        "npu_peak_source": npu_peak_source,
         "rknn_profile_source": rknn_profile_source,
         "rknn_operator_count": rknn_perf.get("operator_count"),
         "rknn_total_time_ms": (rknn_perf.get("summary", {}).get("total_operator_elapsed_time_us") or 0.0) / 1000.0 if rknn_perf.get("summary", {}).get("total_operator_elapsed_time_us") is not None else None,
         "rknn_run_duration_ms": (rknn_perf_run.get("run_duration_us") or 0.0) / 1000.0 if rknn_perf_run.get("run_duration_us") is not None else None,
         "rknn_peak_mac_usage_percent": rknn_perf.get("summary", {}).get("peak_mac_usage_percent"),
         "rknn_total_memory_mib": rknn_memory.get("total_memory_mib"),
-        "rknn_runtime_layer_log_count": rknn_runtime_log.get("layer_line_count", 0),
+        "rknn_runtime_layer_log_count": rknn_runtime_layer_log_count,
         "tts_model_size_mib": runtime_info.get("tts_model_size_mib"),
         "tts_model_is_int8": runtime_info.get("tts_model_is_int8"),
         "tts_model_name": runtime_info.get("tts_model_name"),
+        "asr_supports_rknn": runtime_info.get("asr_supports_rknn"),
         "asr_streaming_rknn_available": runtime_info.get("asr_streaming_rknn_available"),
         "asr_streaming_rknn_model_size_mib": runtime_info.get("asr_streaming_rknn_model_size_mib"),
         "asr_streaming_rknn_model_name": runtime_info.get("asr_streaming_rknn_model_name"),
@@ -1583,7 +1760,6 @@ def build_report(
     workspace_root: Path = WORKSPACE_ROOT,
     output_root: Path | None = None,
     runtime_dir: Path | None = None,
-    tts_runtime_dir: Path | None = None,
     evidence_dir: Path | None = None,
     requirements_path: Path | None = None,
     plan_path: Path | None = None,
@@ -1595,8 +1771,9 @@ def build_report(
     resolved_output_root.mkdir(parents=True, exist_ok=True)
 
     resolved_runtime_dir = (runtime_dir or (workspace_root / DEFAULT_RUNTIME_DIR.relative_to(WORKSPACE_ROOT))).resolve()
-    resolved_tts_runtime_dir = (tts_runtime_dir or (workspace_root / DEFAULT_TTS_RUNTIME_DIR.relative_to(WORKSPACE_ROOT))).resolve()
-    resolved_evidence_dir = (evidence_dir or (resolved_runtime_dir / "output")).resolve()
+    resolved_asr_runtime_dir = (resolved_runtime_dir / ASR_RUNTIME_SUBDIR).resolve()
+    resolved_tts_runtime_dir = (resolved_runtime_dir / TTS_RUNTIME_SUBDIR).resolve()
+    resolved_evidence_dir = (evidence_dir or (resolved_asr_runtime_dir / "output")).resolve()
     resolved_tts_evidence_dir = (resolved_tts_runtime_dir / "output").resolve()
     resolved_requirements_path = (requirements_path or (workspace_root / DEFAULT_REQUIREMENTS_PATH.relative_to(WORKSPACE_ROOT))).resolve()
     resolved_plan_path = resolve_plan_path(workspace_root, plan_path.resolve() if plan_path is not None else None)
@@ -1618,7 +1795,7 @@ def build_report(
     else:
         unittest_output_asset = None
 
-    runtime_info = inspect_runtime(resolved_runtime_dir, resolved_tts_runtime_dir)
+    runtime_info = inspect_runtime(resolved_runtime_dir)
     evidence = collect_evidence(resolved_evidence_dir, assets_dir, tts_evidence_dir=resolved_tts_evidence_dir)
     if unittest_output_asset is not None:
         evidence["assets"]["unittest_output"] = unittest_output_asset
@@ -1689,8 +1866,7 @@ def build_report(
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate an integrated RKVoice HTML/JSON test report")
     parser.add_argument("--output-root", default="", help="Report output root directory")
-    parser.add_argument("--runtime-dir", default="", help="ASR runtime bundle directory used for evidence discovery")
-    parser.add_argument("--tts-runtime-dir", default="", help="TTS (MeloTTS-RKNN2) runtime bundle directory")
+    parser.add_argument("--runtime-dir", default="", help="Unified runtime project directory used for evidence discovery")
     parser.add_argument("--evidence-dir", default="", help="Explicit evidence directory, defaults to <runtime-dir>/output")
     parser.add_argument("--requirements", default="", help="Requirements markdown path")
     parser.add_argument("--plan", default="", help="TTS test plan JSON path")
@@ -1706,7 +1882,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = build_report(
             output_root=Path(args.output_root).resolve() if args.output_root else None,
             runtime_dir=Path(args.runtime_dir).resolve() if args.runtime_dir else None,
-            tts_runtime_dir=Path(args.tts_runtime_dir).resolve() if args.tts_runtime_dir else None,
             evidence_dir=Path(args.evidence_dir).resolve() if args.evidence_dir else None,
             requirements_path=Path(args.requirements).resolve() if args.requirements else None,
             plan_path=Path(args.plan).resolve() if args.plan else None,

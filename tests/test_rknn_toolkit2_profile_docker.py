@@ -30,8 +30,8 @@ class RKNNToolkit2ProfileDockerTests(WorkspaceTestCase):
 
     def test_build_docker_run_command_mounts_workspace_and_model(self) -> None:
         workspace_root = Path(self.workspace_root)
-        model_path = workspace_root / "artifacts" / "runtime" / "sherpa_onnx_rk3588_runtime" / "models" / "asr" / "rknn" / "sense-voice-rk3588-20s" / "model.rknn"
-        output_dir = workspace_root / "artifacts" / "runtime" / "sherpa_onnx_rk3588_runtime" / "output"
+        model_path = workspace_root / "artifacts" / "runtime" / "rkvoice_runtime" / "asr" / "models" / "asr" / "rknn" / "sense-voice-rk3588-20s" / "model.rknn"
+        output_dir = workspace_root / "artifacts" / "runtime" / "rkvoice_runtime" / "asr" / "output"
 
         command = build_docker_run_command(
             workspace_root=workspace_root,
@@ -48,9 +48,9 @@ class RKNNToolkit2ProfileDockerTests(WorkspaceTestCase):
         self.assertEqual(command[0:3], ["docker", "run", "--rm"])
         self.assertIn(f"{workspace_root.resolve().as_posix()}:{DEFAULT_CONTAINER_WORKSPACE.as_posix()}", command)
         self.assertIn("--model", command)
-        self.assertIn("/workspace/artifacts/runtime/sherpa_onnx_rk3588_runtime/models/asr/rknn/sense-voice-rk3588-20s/model.rknn", command)
+        self.assertIn("/workspace/artifacts/runtime/rkvoice_runtime/asr/models/asr/rknn/sense-voice-rk3588-20s/model.rknn", command)
         self.assertIn("--output-dir", command)
-        self.assertIn("/workspace/artifacts/runtime/sherpa_onnx_rk3588_runtime/output", command)
+        self.assertIn("/workspace/artifacts/runtime/rkvoice_runtime/asr/output", command)
         self.assertIn("--device-id", command)
         self.assertIn("device-1", command)
         self.assertIn("--adb-connect", command)

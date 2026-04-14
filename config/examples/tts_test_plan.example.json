@@ -1,6 +1,6 @@
 {
   "name": "rk3588-baseline-suite",
-  "description": "RK3588 板端离线 TTS 的工程化批量测试基线，覆盖冒烟、时延、领域词和长稳短循环。",
+  "description": "RK3588 板端离线 TTS 的工程化批量测试基线，覆盖 20+ 条冒烟、时延、领域词和长稳短循环样例。",
   "defaults": {
     "repeat": 3,
     "warmup": 1,
@@ -21,6 +21,16 @@
         "baseline"
       ],
       "sentence": "你好，欢迎使用离线语音合成服务。"
+    },
+    {
+      "id": "smoke-status-brief",
+      "name": "系统状态播报",
+      "category": "smoke",
+      "tags": [
+        "smoke",
+        "status"
+      ],
+      "sentence": "当前系统状态正常，离线语音服务已经启动。"
     },
     {
       "id": "latency-short-command",
@@ -49,6 +59,34 @@
       "warmup": 1,
       "latency_threshold_ms": 1100.0,
       "rtf_threshold": 0.40
+    },
+    {
+      "id": "latency-frequency-switch",
+      "name": "频点切换口令",
+      "category": "latency",
+      "tags": [
+        "latency",
+        "frequency"
+      ],
+      "sentence": "立即切换到八点一五兆赫并保持静默监听。",
+      "repeat": 5,
+      "warmup": 1,
+      "latency_threshold_ms": 1150.0,
+      "rtf_threshold": 0.42
+    },
+    {
+      "id": "latency-alert-broadcast",
+      "name": "告警广播短句",
+      "category": "latency",
+      "tags": [
+        "latency",
+        "alert"
+      ],
+      "sentence": "前方链路异常，请立即切换备用通道。",
+      "repeat": 5,
+      "warmup": 1,
+      "latency_threshold_ms": 1150.0,
+      "rtf_threshold": 0.42
     },
     {
       "id": "domain-frequency",
@@ -81,6 +119,116 @@
       "sentence": "请记录坐标一二零点三五，北纬三十一点二八。"
     },
     {
+      "id": "domain-grid-reference",
+      "name": "网格坐标播报",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "coordinate"
+      ],
+      "sentence": "目标位于 B 七区三列，向东偏移二百米。"
+    },
+    {
+      "id": "domain-serial-code",
+      "name": "编号与代号播报",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "serial"
+      ],
+      "sentence": "任务编号 A 三九二七，校验码五零八一。"
+    },
+    {
+      "id": "domain-letter-number-mix",
+      "name": "字母数字混排",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "alphanumeric"
+      ],
+      "sentence": "请抄收 K 七四和 V 二十一两组短报码。"
+    },
+    {
+      "id": "domain-weather-summary",
+      "name": "气象摘要播报",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "weather"
+      ],
+      "sentence": "当前风速四级，能见度八公里，预计两小时后转小雨。"
+    },
+    {
+      "id": "domain-power-status",
+      "name": "电源状态播报",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "power"
+      ],
+      "sentence": "一号电池组余量百分之七十五，外接电源连接稳定。"
+    },
+    {
+      "id": "domain-emergency-command",
+      "name": "紧急处置口令",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "emergency"
+      ],
+      "sentence": "发现异常信号后立即上报，并执行一级静默处置。"
+    },
+    {
+      "id": "domain-navigation-brief",
+      "name": "导航提示播报",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "navigation"
+      ],
+      "sentence": "请沿二号通道直行五百米，然后左转进入掩体区。"
+    },
+    {
+      "id": "domain-shift-handover",
+      "name": "交接班口令",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "handover"
+      ],
+      "sentence": "本班记录已经同步完毕，请下一班次确认接收。"
+    },
+    {
+      "id": "domain-channel-scan",
+      "name": "信道扫描结果",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "channel"
+      ],
+      "sentence": "主信道干扰较强，建议优先使用三号备用链路。"
+    },
+    {
+      "id": "domain-logistics-summary",
+      "name": "后勤补给摘要",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "logistics"
+      ],
+      "sentence": "补给车队预计二十分钟后抵达，请提前完成交接准备。"
+    },
+    {
+      "id": "domain-medical-brief",
+      "name": "医疗保障提示",
+      "category": "domain",
+      "tags": [
+        "domain",
+        "medical"
+      ],
+      "sentence": "医疗点已完成布设，担架通道与应急药箱位置已确认。"
+    },
+    {
       "id": "stability-short-loop",
       "name": "长稳基线短循环",
       "category": "stability",
@@ -93,6 +241,34 @@
       "warmup": 2,
       "latency_threshold_ms": 1300.0,
       "rtf_threshold": 0.45
+    },
+    {
+      "id": "stability-command-burst",
+      "name": "连续指令播报短循环",
+      "category": "stability",
+      "tags": [
+        "stability",
+        "burst"
+      ],
+      "sentence": "重复广播任务指令并检查系统输出一致性。",
+      "repeat": 30,
+      "warmup": 2,
+      "latency_threshold_ms": 1350.0,
+      "rtf_threshold": 0.48
+    },
+    {
+      "id": "stability-night-watch",
+      "name": "夜间值守口令循环",
+      "category": "stability",
+      "tags": [
+        "stability",
+        "watch"
+      ],
+      "sentence": "夜间值守期间请每十五分钟汇报一次链路状态。",
+      "repeat": 40,
+      "warmup": 2,
+      "latency_threshold_ms": 1400.0,
+      "rtf_threshold": 0.50
     },
     {
       "id": "acceptance-200ms-target",
@@ -108,6 +284,21 @@
       "latency_threshold_ms": 200.0,
       "rtf_threshold": 0.10,
       "notes": "当前 CPU 基线预计不会通过，该用例用于对标最终 NPU 验收目标。"
+    },
+    {
+      "id": "acceptance-command-pack",
+      "name": "二十条短句验收样例包",
+      "category": "acceptance",
+      "tags": [
+        "acceptance",
+        "batch"
+      ],
+      "sentence": "验收阶段应在二十到五十条业务短句集合上统计 P50 与 P95。",
+      "repeat": 20,
+      "warmup": 2,
+      "latency_threshold_ms": 200.0,
+      "rtf_threshold": 0.10,
+      "notes": "该用例用于提示最终验收应基于句集统计，而不是单条冒烟样例。"
     }
   ]
 }

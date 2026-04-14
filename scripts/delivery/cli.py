@@ -28,7 +28,7 @@ def _add_source_args(subparser: argparse.ArgumentParser) -> None:
 
 
 def _add_build_args(subparser: argparse.ArgumentParser) -> None:
-    subparser.add_argument("--runtime-dir", type=Path, default=None, help="Local runtime bundle directory")
+    subparser.add_argument("--runtime-dir", type=Path, default=None, help="Local unified runtime project directory")
 
 
 def _add_remote_args(subparser: argparse.ArgumentParser) -> None:
@@ -36,7 +36,7 @@ def _add_remote_args(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument("--username", default=None, help="Board SSH username")
     subparser.add_argument("--password", default=None, help="Board SSH password")
     subparser.add_argument("--source-ip", default=None, help="Optional local source IP used to reach the board")
-    subparser.add_argument("--remote-dir", default=None, help="Remote runtime directory on the board")
+    subparser.add_argument("--remote-dir", default=None, help="Remote unified runtime project directory on the board")
     subparser.add_argument("--ssh-timeout", type=int, default=None, help="SSH connect timeout in seconds")
     subparser.add_argument("--remote-timeout", type=int, default=None, help="Remote command timeout in seconds")
     subparser.add_argument("--skip-smoketest", action="store_true", help="Skip remote smoke test")
@@ -49,16 +49,16 @@ def _build_asr_parser(subparsers: argparse._SubParsersAction) -> None:
     download_p = asr_sub.add_parser("download", help="Prepare the local ASR source bundle")
     _add_source_args(download_p)
 
-    build_p = asr_sub.add_parser("build", help="Assemble the local ASR runtime bundle")
+    build_p = asr_sub.add_parser("build", help="Assemble the local ASR component inside the unified runtime project")
     _add_source_args(build_p)
     _add_build_args(build_p)
 
-    upload_p = asr_sub.add_parser("upload", help="Upload an existing ASR runtime bundle to the board")
-    upload_p.add_argument("--runtime-dir", type=Path, default=None, help="Local runtime bundle directory")
+    upload_p = asr_sub.add_parser("upload", help="Upload the local ASR runtime component to the board")
+    upload_p.add_argument("--runtime-dir", type=Path, default=None, help="Local unified runtime project directory")
     _add_remote_args(upload_p)
     upload_p.add_argument("--skip-rknn-smoketest", action="store_true", help="Run remote smoke test without the RKNN ASR verification step")
 
-    all_p = asr_sub.add_parser("all", help="Prepare, assemble, upload, and smoke test the ASR runtime")
+    all_p = asr_sub.add_parser("all", help="Prepare, assemble, upload, and smoke test the ASR runtime component")
     _add_source_args(all_p)
     _add_build_args(all_p)
     _add_remote_args(all_p)
@@ -73,17 +73,17 @@ def _build_tts_parser(subparsers: argparse._SubParsersAction) -> None:
     download_p = tts_sub.add_parser("download", help="Prepare the local TTS source bundle")
     _add_source_args(download_p)
 
-    build_p = tts_sub.add_parser("build", help="Assemble the local TTS runtime bundle")
+    build_p = tts_sub.add_parser("build", help="Assemble the local TTS component inside the unified runtime project")
     _add_source_args(build_p)
     _add_build_args(build_p)
 
-    upload_p = tts_sub.add_parser("upload", help="Upload an existing TTS runtime bundle to the board")
-    upload_p.add_argument("--runtime-dir", type=Path, default=None, help="Local runtime bundle directory")
+    upload_p = tts_sub.add_parser("upload", help="Upload the local TTS runtime component to the board")
+    upload_p.add_argument("--runtime-dir", type=Path, default=None, help="Local unified runtime project directory")
     _add_remote_args(upload_p)
     upload_p.add_argument("--text", default=None, help="Smoke test TTS text")
     upload_p.add_argument("--skip-python-deps-install", action="store_true", help="Skip the board-side offline Python dependency installation step")
 
-    all_p = tts_sub.add_parser("all", help="Prepare, assemble, upload, and smoke test the TTS runtime")
+    all_p = tts_sub.add_parser("all", help="Prepare, assemble, upload, and smoke test the TTS runtime component")
     _add_source_args(all_p)
     _add_build_args(all_p)
     _add_remote_args(all_p)
@@ -93,7 +93,7 @@ def _build_tts_parser(subparsers: argparse._SubParsersAction) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="RKVoice delivery: prepare, assemble, and deploy ASR/TTS runtime bundles")
+    parser = argparse.ArgumentParser(description="RKVoice delivery: prepare, assemble, and deploy ASR/TTS runtime components inside one unified runtime project")
     subparsers = parser.add_subparsers(dest="pipeline", required=True)
     _build_asr_parser(subparsers)
     _build_tts_parser(subparsers)
@@ -103,37 +103,37 @@ def parse_args() -> argparse.Namespace:
 def _resolve_board_connection(args: argparse.Namespace, local_settings: dict[str, str]) -> dict:
     host = resolve_required_text_option(
         args.host,
-        env_names=("RKVOICE_BOARD_HOST", "TTS_BOARD_HOST"),
+        env_names=("RKVOICE_BOARD_HOST",),
         local_settings=local_settings,
         option_name="board host",
     )
     username = resolve_required_text_option(
         args.username,
-        env_names=("RKVOICE_BOARD_USERNAME", "TTS_BOARD_USERNAME"),
+        env_names=("RKVOICE_BOARD_USERNAME",),
         local_settings=local_settings,
         option_name="board username",
     )
     password = resolve_required_text_option(
         args.password,
-        env_names=("RKVOICE_BOARD_PASSWORD", "TTS_BOARD_PASSWORD"),
+        env_names=("RKVOICE_BOARD_PASSWORD",),
         local_settings=local_settings,
         option_name="board password",
     )
     ssh_timeout = resolve_int_option(
         args.ssh_timeout,
-        env_names=("RKVOICE_SSH_TIMEOUT", "TTS_SSH_TIMEOUT"),
+        env_names=("RKVOICE_SSH_TIMEOUT",),
         local_settings=local_settings,
         default=8,
     )
     remote_timeout = resolve_int_option(
         args.remote_timeout,
-        env_names=("RKVOICE_REMOTE_TIMEOUT", "TTS_REMOTE_TIMEOUT"),
+        env_names=("RKVOICE_REMOTE_TIMEOUT",),
         local_settings=local_settings,
         default=1800,
     )
     source_ip_value = resolve_text_option(
         args.source_ip,
-        env_names=("RKVOICE_SOURCE_IP", "TTS_SOURCE_IP"),
+        env_names=("RKVOICE_SOURCE_IP",),
         local_settings=local_settings,
         default="",
     )
@@ -157,13 +157,13 @@ def _run_asr(args: argparse.Namespace) -> None:
 
     stage_dir = resolve_path_option(
         getattr(args, "stage_dir", None),
-        env_names=("RKVOICE_ASR_STAGE_DIR", "RKVOICE_STAGE_DIR", "TTS_STAGE_DIR"),
+        env_names=("RKVOICE_ASR_STAGE_DIR", "RKVOICE_STAGE_DIR"),
         local_settings=local_settings,
         default=ASR_DEFAULT_STAGE_DIR,
     )
     runtime_dir = resolve_path_option(
         getattr(args, "runtime_dir", None),
-        env_names=("RKVOICE_ASR_RUNTIME_DIR", "RKVOICE_RUNTIME_DIR", "TTS_RUNTIME_DIR"),
+        env_names=("RKVOICE_ASR_RUNTIME_DIR", "RKVOICE_RUNTIME_DIR"),
         local_settings=local_settings,
         default=ASR_DEFAULT_RUNTIME_DIR,
     )
@@ -185,7 +185,7 @@ def _run_asr(args: argparse.Namespace) -> None:
         conn = _resolve_board_connection(args, local_settings)
         remote_dir = resolve_text_option(
             args.remote_dir,
-            env_names=("RKVOICE_ASR_REMOTE_DIR", "RKVOICE_REMOTE_DIR", "TTS_REMOTE_DIR"),
+            env_names=("RKVOICE_ASR_REMOTE_DIR", "RKVOICE_REMOTE_DIR"),
             local_settings=local_settings,
             default=ASR_DEFAULT_REMOTE_DIR,
         )

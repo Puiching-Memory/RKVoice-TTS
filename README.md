@@ -43,7 +43,7 @@
 - 推荐通过 uv run 执行 Python 入口；对于包化的 delivery CLI，推荐使用 python -m 形式。
 - 实际实现位于 scripts/board、scripts/delivery 和 scripts/release。
 - ASR 和 TTS 交付管线统一位于 scripts/delivery/，通过 `asr` / `tts` 子命令区分管线，共享 config、remote、shared 基础设施。
-- ASR 管线 (sherpa-onnx RK3588) 按 source bundle → runtime assemble → upload/deploy 流程实现。
+- ASR 管线 (sherpa-onnx RK3588) 按 source bundle → 本地 RKNN 导出 → runtime assemble → upload/deploy 流程实现。
 - TTS 管线 (MeloTTS-RKNN2) 提供 Python + RKNN TTS 运行包，build 时准备离线 wheelhouse，upload/all 时在板端自动安装到运行包内的 pydeps/。
 - scripts/delivery/templates/ 保存运行包 shell 模板，避免在 Python 入口中内嵌大段板端脚本。
 
@@ -72,8 +72,8 @@ uv run python -m scripts.testing.rkvoice_report
 uv run python scripts/board/prepare_rknn_debug_bridge.py
 uv run python scripts/testing/rknn_toolkit2_profile_in_docker.py --prepare-board-debug-bridge
 uv run python scripts/board/set_board_static_ipv4.py
-uv run python scripts/release/package_release.py --version v1.0.0 --include-asr-runtime-bundle --include-asr-evidence --include-tts-runtime-bundle --include-tts-evidence
-uv run python scripts/release/package_release_in_docker.py --version v1.0.0 --include-asr-runtime-bundle --include-asr-evidence --include-tts-runtime-bundle --include-tts-evidence
+uv run python scripts/release/package_release.py --version v1.0.0 --include-runtime-bundle --include-evidence
+uv run python scripts/release/package_release_in_docker.py --version v1.0.0 --include-runtime-bundle --include-evidence
 ```
 
 ## 单元测试
@@ -107,7 +107,7 @@ uv run python -m scripts.testing.rkvoice_report
 
 ```powershell
 uv run python -m scripts.testing.rkvoice_report --skip-unittests
-uv run python -m scripts.testing.rkvoice_report --runtime-dir artifacts/runtime/sherpa_onnx_rk3588_runtime
+uv run python -m scripts.testing.rkvoice_report --runtime-dir artifacts/runtime/rkvoice_runtime
 uv run python -m scripts.testing.rkvoice_report --fail-on-requirement-failures
 ```
 
@@ -131,7 +131,7 @@ uv run python -m scripts.testing.rkvoice_report --fail-on-requirement-failures
 - 本地敏感连接信息放在 config/local/
 - 示例模板放在 config/examples/
 - 不建议把板卡密码、源地址等信息写入可交付文档
-- ASR 主线默认使用 RKVOICE_* 环境变量；为兼容历史流程，delivery CLI 仍接受旧的 TTS_* 环境变量
+- runtime 根目录默认使用 RKVOICE_* 环境变量；TTS 仍保留 RKVOICE_MELO_* 变量用于源码包和测试文本配置
 
 推荐配置文件：
 
@@ -139,11 +139,14 @@ uv run python -m scripts.testing.rkvoice_report --fail-on-requirement-failures
 - config/local/delivery.local.env
 - config/local/tts_test_plan.json
 
-MeloTTS-RKNN2 路径相关变量单独使用以下名字，避免和历史 TTS 目录配置串线：
+Unified runtime 根目录优先使用以下名字：
+
+- RKVOICE_RUNTIME_DIR
+- RKVOICE_REMOTE_DIR
+
+MeloTTS-RKNN2 仍保留以下专用变量用于源码包与测试文本：
 
 - RKVOICE_MELO_STAGE_DIR
-- RKVOICE_MELO_RUNTIME_DIR
-- RKVOICE_MELO_REMOTE_DIR
 - RKVOICE_MELO_TTS_TEXT
 
 MeloTTS-RKNN2 额外支持以下运行期变量：
@@ -168,29 +171,30 @@ MeloTTS-RKNN2 额外支持以下运行期变量：
 
 当前默认运行包目录：
 
-- artifacts/runtime/sherpa_onnx_rk3588_runtime/ （ASR）
-- artifacts/runtime/melotts_rknn2_runtime/ （TTS）
+- artifacts/runtime/rkvoice_runtime/
+- artifacts/runtime/rkvoice_runtime/asr/ （ASR）
+- artifacts/runtime/rkvoice_runtime/tts/ （TTS）
 
 当前 ASR 运行包形态：
 
-- bin/sherpa-onnx-offline
+- bin/sherpa-onnx
 - lib/libsherpa-onnx-c-api.so
-- models/asr/cpu/sense-voice/
-- models/asr/rknn/sense-voice-rk3588-20s/
+- models/asr/streaming-rknn/streaming-zipformer-rk3588-small/
 - run_asr.sh
 - smoketest.sh
+- tools/profile_asr_inference.sh
 
 当前后端支持状态：
 
-- ASR CPU/ONNX：可用
-- ASR RKNN/NPU：可用，要求板端提供兼容版本的 librknnrt.so
+- ASR streaming RKNN/NPU：默认交付入口；build 时基于上游 ONNX 源模型在本机或 Docker 中导出 RKNN，板端要求提供兼容版本的 librknnrt.so
 - TTS MeloTTS-RKNN2：交付主线，要求板端提供 python3；运行包会自带离线 wheelhouse 并在 upload/all 时自动安装 onnxruntime、soundfile、cn2an、inflect 和 rknn-toolkit-lite2 到 pydeps/
 
 MeloTTS-RKNN2 上游镜像当前标注为 AGPL-3.0，商业交付前应完成法务评估。
 
 当前默认冒烟结果目录：
 
-- artifacts/runtime/sherpa_onnx_rk3588_runtime/output/
+- artifacts/runtime/rkvoice_runtime/asr/output/
+- artifacts/runtime/rkvoice_runtime/tts/output/
 
 当前默认发布目录：
 

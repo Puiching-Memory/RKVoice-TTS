@@ -221,12 +221,36 @@ function fmt(v, d, sfx) {
   sfx = sfx || '';
   return Number(v).toFixed(d == null ? 1 : d) + sfx;
 }
+function hasMetric(v) {
+  return v != null && !(typeof v === 'number' && isNaN(v));
+}
 function statusLabel(s) {
   return {pass:'\u901a\u8fc7',fail:'\u672a\u901a\u8fc7',partial:'\u90e8\u5206\u6ee1\u8db3',unknown:'\u8bc1\u636e\u4e0d\u8db3'}[s] || s;
 }
 function pillHtml(status) {
   var cls = {pass:'pill-pass',fail:'pill-fail',partial:'pill-partial',unknown:'pill-unknown'}[status] || 'pill-unknown';
   return '<span class="pill ' + cls + '">' + esc(statusLabel(status)) + '</span>';
+}
+function profileSourceLabel(source) {
+  return {
+    eval_perf:'Toolkit2 eval_perf()',
+    perf_detail:'rknn perf_detail',
+    runtime_log:'RKNN_LOG_LEVEL=4',
+    load_sampling:'rknpu/load \u91c7\u6837',
+    tts_profile_csv:'TTS profile-samples.csv'
+  }[source] || source || 'n/a';
+}
+function npuSourceLabel(source) {
+  return {
+    rknpu_load:'\u6765\u81ea rknpu/load \u91c7\u6837',
+    tts_profile_csv:'\u6765\u81ea TTS profile-samples.csv',
+    runtime_log:'\u6765\u81ea RKNN runtime log'
+  }[source] || '\u6765\u6e90\u5f85\u786e\u8ba4';
+}
+function asrLatencyLabel(unit) {
+  if (unit === '\u8bcd') return '\u5355\u8bcd';
+  if (unit === '\u5b57') return '\u5355\u5b57';
+  return '\u5355\u5143';
 }
 
 /* ── Top Bar ───────────────────────────────────────────── */
@@ -281,17 +305,23 @@ function pillHtml(status) {
 /* ── Key Metrics ───────────────────────────────────────── */
 (function() {
   var o = D.observed || {};
+  var asrUnitLabel = o.asr_streaming_rknn_latency_unit || '\u5b57';
+  var asrUnitCountText = o.asr_streaming_rknn_unit_count ? ('\u6309 '+o.asr_streaming_rknn_unit_count+asrUnitLabel+' \u4f30\u7b97 \u00b7 ') : '';
   var cards = [
-    {t:'TTS Cold Start',v:fmt(o.tts_cold_start_elapsed_ms,0,' ms'),s:'load '+fmt(o.tts_cold_start_model_load_ms,0,' ms'),c:'#d28d49,#9c5a12'},
-    {t:'TTS Warm Run',v:fmt(o.tts_warm_run_elapsed_ms,0,' ms'),s:'load '+fmt(o.tts_warm_run_model_load_ms,0,' ms'),c:'#bf7f31,#8c560e'},
-    {t:'TTS Profile Run',v:fmt(o.tts_profile_run_elapsed_ms,0,' ms'),s:'load '+fmt(o.tts_profile_run_model_load_ms,0,' ms'),c:'#a45b73,#6f2948'},
-    {t:'ASR \u6d41\u5f0f RKNN',v:fmt(o.asr_streaming_rknn_elapsed_ms,0,' ms'),s:'RTF '+fmt(o.asr_streaming_rknn_rtf,3)+' (NPU)',c:'#2563eb,#1e40af'},
-    {t:'NPU \u5cf0\u503c\u8d1f\u8f7d',v:fmt(o.npu_peak_percent,0,' %'),s:'\u6765\u81ea rknpu/load \u91c7\u6837',c:'#b65f6f,#7e3240'},
-    {t:'RKNN \u8fd0\u884c\u8017\u65f6',v:fmt(o.rknn_run_duration_ms,1,' ms'),s:'PERF_RUN / \u603b\u7b97\u5b50\u8017\u65f6',c:'#547e8e,#274754'},
-    {t:'\u5cf0\u503c MAC Usage',v:fmt(o.rknn_peak_mac_usage_percent,2,'%'),s:'\u5b98\u65b9 profiler \u8f93\u51fa',c:'#c68163,#7f3f2d'},
-    {t:'RKNN \u5185\u5b58\u603b\u91cf',v:fmt(o.rknn_total_memory_mib,2,' MiB'),s:'weight + internal tensor',c:'#6d8f79,#325944'},
-    {t:'\u6a21\u578b\u603b\u91cf',v:fmt(o.models_total_size_mib,1,' MiB'),s:'\u5f53\u524d models \u76ee\u5f55',c:'#7d7c98,#514f73'}
+    {t:'TTS Cold Start',raw:o.tts_cold_start_elapsed_ms,v:fmt(o.tts_cold_start_elapsed_ms,0,' ms'),s:'load '+fmt(o.tts_cold_start_model_load_ms,0,' ms'),c:'#d28d49,#9c5a12'},
+    {t:'TTS Warm Run',raw:o.tts_warm_run_elapsed_ms,v:fmt(o.tts_warm_run_elapsed_ms,0,' ms'),s:'load '+fmt(o.tts_warm_run_model_load_ms,0,' ms'),c:'#bf7f31,#8c560e'},
+    {t:'TTS Profile Run',raw:o.tts_profile_run_elapsed_ms,v:fmt(o.tts_profile_run_elapsed_ms,0,' ms'),s:'load '+fmt(o.tts_profile_run_model_load_ms,0,' ms'),c:'#a45b73,#6f2948'},
+    {t:'ASR \u9996\u5b57\u65f6\u95f4\u6233',raw:o.asr_streaming_rknn_first_unit_timestamp_ms,v:fmt(o.asr_streaming_rknn_first_unit_timestamp_ms,0,' ms'),s:'\u6765\u81ea token timestamps',c:'#3b82f6,#1d4ed8'},
+    {t:'ASR '+asrLatencyLabel(asrUnitLabel)+'\u8017\u65f6',raw:o.asr_streaming_rknn_per_unit_latency_ms,v:fmt(o.asr_streaming_rknn_per_unit_latency_ms,1,' ms/'+asrUnitLabel),s:asrUnitCountText+'RTF '+fmt(o.asr_streaming_rknn_rtf,3)+' (NPU)',c:'#2563eb,#1e40af'},
+    {t:'ASR \u6700\u7ec8\u7ed3\u679c\u8017\u65f6',raw:o.asr_streaming_rknn_final_result_latency_ms,v:fmt(o.asr_streaming_rknn_final_result_latency_ms,0,' ms'),s:'\u6765\u81ea\u5185\u90e8 Elapsed seconds',c:'#1e40af,#172554'},
+    {t:'NPU \u5cf0\u503c\u8d1f\u8f7d',raw:o.npu_peak_percent,v:fmt(o.npu_peak_percent,0,' %'),s:npuSourceLabel(o.npu_peak_source),c:'#b65f6f,#7e3240'},
+    {t:'TTS \u5cf0\u503c RSS',raw:o.tts_max_rss_mib,v:fmt(o.tts_max_rss_mib,1,' MiB'),s:'\u6765\u81ea TTS profile-samples.csv',c:'#7b8f52,#4e6530'},
+    {t:'RKNN \u8fd0\u884c\u8017\u65f6',raw:o.rknn_run_duration_ms,v:fmt(o.rknn_run_duration_ms,1,' ms'),s:'PERF_RUN / \u603b\u7b97\u5b50\u8017\u65f6',c:'#547e8e,#274754'},
+    {t:'\u5cf0\u503c MAC Usage',raw:o.rknn_peak_mac_usage_percent,v:fmt(o.rknn_peak_mac_usage_percent,2,'%'),s:'\u5b98\u65b9 profiler \u8f93\u51fa',c:'#c68163,#7f3f2d'},
+    {t:'RKNN \u5185\u5b58\u603b\u91cf',raw:o.rknn_total_memory_mib,v:fmt(o.rknn_total_memory_mib,2,' MiB'),s:'weight + internal tensor',c:'#6d8f79,#325944'},
+    {t:'\u6a21\u578b\u603b\u91cf',raw:o.models_total_size_mib,v:fmt(o.models_total_size_mib,1,' MiB'),s:'\u5f53\u524d models \u76ee\u5f55',c:'#7d7c98,#514f73'}
   ];
+  cards = cards.filter(function(c){ return hasMetric(c.raw); });
   var html = '';
   cards.forEach(function(c){
     html += '<div class="metric-card">';
@@ -322,7 +352,7 @@ function pillHtml(status) {
 
   var html = factCard('\u8fd0\u884c\u73af\u5883', [
     ['TTS \u540e\u7aef', rt.tts_backend || 'n/a'],
-    ['ASR \u6a21\u5f0f', rt.asr_mode || 'n/a'],
+    ['ASR \u9ed8\u8ba4\u94fe\u8def', rt.asr_streaming_rknn_available ? 'streaming RKNN' : 'n/a'],
     ['RKNN Runtime', bc.rknn_runtime_version || 'n/a'],
     ['\u677f\u7aef\u5185\u5b58', bc.memory_total || 'n/a'],
     ['\u79bb\u7ebf\u5c31\u7eea', obs.offline_ready ? '\u2713 \u5c31\u7eea' : '\u5f85\u786e\u8ba4'],
@@ -397,20 +427,19 @@ function pillHtml(status) {
   var load = evd.rknpu_load || {};
   var samples = load.samples || [];
 
-  var sourceLabel = obs.rknn_profile_source || 'n/a';
-  if (sourceLabel === 'eval_perf') sourceLabel = 'Toolkit2 eval_perf()';
-  else if (sourceLabel === 'perf_detail') sourceLabel = 'rknn perf_detail';
+  var sourceLabel = profileSourceLabel(obs.rknn_profile_source);
 
   var boxes = [
-    {l:'Profile Source', v:sourceLabel},
-    {l:'\u5c42\u7ea7\u8bb0\u5f55', v:rknn.operator_count || 0},
-    {l:'NPU \u7b97\u5b50\u6570', v:rknn.npu_operator_count || 0},
-    {l:'\u603b\u7b97\u5b50\u8017\u65f6', v:fmt(summ.total_operator_elapsed_time_us,0,' \u03bcs')},
-    {l:'\u5cf0\u503c MAC Usage', v:fmt(summ.peak_mac_usage_percent,2,'%')},
-    {l:'\u70ed\u70b9\u7b97\u5b50', v:summ.hottest_op_type || 'n/a'},
-    {l:'RKNN \u603b\u5185\u5b58', v:fmt(mem.total_memory_mib,2,' MiB')},
-    {l:'PERF_RUN', v:fmt(obs.rknn_run_duration_ms,3,' ms')}
+    {l:'Profile Source', raw:obs.rknn_profile_source, v:sourceLabel},
+    {l:'\u5c42\u7ea7\u8bb0\u5f55', raw:rknn.operator_count || 0, v:rknn.operator_count || 0},
+    {l:'NPU \u7b97\u5b50\u6570', raw:rknn.npu_operator_count || 0, v:rknn.npu_operator_count || 0},
+    {l:'\u603b\u7b97\u5b50\u8017\u65f6', raw:summ.total_operator_elapsed_time_us, v:fmt(summ.total_operator_elapsed_time_us,0,' \u03bcs')},
+    {l:'\u5cf0\u503c MAC Usage', raw:summ.peak_mac_usage_percent, v:fmt(summ.peak_mac_usage_percent,2,'%')},
+    {l:'\u70ed\u70b9\u7b97\u5b50', raw:summ.hottest_op_type, v:summ.hottest_op_type || 'n/a'},
+    {l:'RKNN \u603b\u5185\u5b58', raw:mem.total_memory_mib, v:fmt(mem.total_memory_mib,2,' MiB')},
+    {l:'PERF_RUN', raw:obs.rknn_run_duration_ms, v:fmt(obs.rknn_run_duration_ms,3,' ms')}
   ];
+  boxes = boxes.filter(function(b){ return hasMetric(b.raw); });
   var html = '<div class="metric-grid" style="margin-bottom:20px">';
   boxes.forEach(function(b){
     html += '<div class="metric-card"><div class="metric-accent" style="background:linear-gradient(135deg,#8b7ab8,#51407c)"></div>';
@@ -468,6 +497,10 @@ function pillHtml(status) {
   if (assets.asr_rknpu_load_heatmap) {
     html += '<div class="card" style="margin-top:16px"><div class="card-header">ASR RKNN NPU Load Heatmap</div>';
     html += '<div class="card-body heatmap-embed"><img src="'+esc(assets.asr_rknpu_load_heatmap)+'" alt="NPU Load Heatmap"></div></div>';
+  }
+  if (assets.tts_profile_heatmap) {
+    html += '<div class="card" style="margin-top:16px"><div class="card-header">TTS Profile Heatmap</div>';
+    html += '<div class="card-body heatmap-embed"><img src="'+esc(assets.tts_profile_heatmap)+'" alt="TTS Profile Heatmap"></div></div>';
   }
 
   document.getElementById('profiling-content').innerHTML = html;
@@ -550,6 +583,8 @@ function pillHtml(status) {
       h += '<div class="sc-row"><span class="sc-key">Decoder Sum</span><span class="sc-val">'+fmt(data.decoder_elapsed_ms,2,' ms')+'</span></div>';
     if (data.decoder_run_count != null)
       h += '<div class="sc-row"><span class="sc-key">Decoder Runs</span><span class="sc-val">'+esc(data.decoder_run_count)+'</span></div>';
+    if (data.exit_code != null)
+      h += '<div class="sc-row"><span class="sc-key">Exit Code</span><span class="sc-val">'+esc(data.exit_code)+'</span></div>';
     if (data.audio_duration_seconds != null)
       h += '<div class="sc-row"><span class="sc-key">\u97f3\u9891\u65f6\u957f</span><span class="sc-val">'+fmt(data.audio_duration_seconds,3,' s')+'</span></div>';
     if (data.rtf != null)
@@ -654,6 +689,28 @@ function pillHtml(status) {
       html += '<td style="text-align:right">'+fmt(a.latency_threshold_ms,0,' ms')+'</td>';
       html += '<td style="text-align:right">'+fmt(a.rtf_threshold,2)+'</td>';
       html += '<td style="color:var(--txt2);font-size:.8rem">'+esc(a.notes||'')+'</td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  var cases = plan.cases || [];
+  if (cases.length > 0) {
+    html += '<div class="card" style="margin-top:12px"><div class="card-header">\u8ba1\u5212\u7528\u4f8b\u6e05\u5355</div>';
+    html += '<div class="tbl-wrap" style="max-height:560px;overflow-y:auto"><table><thead><tr><th>ID</th><th>\u540d\u79f0</th><th>\u7c7b\u522b</th><th>\u53e5\u5b50</th><th>Repeat/Warmup</th><th>\u65f6\u5ef6\u9608\u503c</th><th>RTF \u9608\u503c</th><th>Tags</th><th>\u5907\u6ce8</th></tr></thead><tbody>';
+    cases.forEach(function(c){
+      var repeatWarmup = (c.repeat != null ? c.repeat : 'n/a') + ' / ' + (c.warmup != null ? c.warmup : 'n/a');
+      var threshold = hasMetric(c.latency_threshold_ms) ? fmt(c.latency_threshold_ms,0,' ms') : 'n/a';
+      var rtf = hasMetric(c.rtf_threshold) ? fmt(c.rtf_threshold,2) : 'n/a';
+      var tags = (c.tags || []).join(', ');
+      html += '<tr><td class="mono">'+esc(c.id)+'</td>';
+      html += '<td>'+esc(c.name)+'</td>';
+      html += '<td>'+esc(c.category)+'</td>';
+      html += '<td style="min-width:320px;white-space:normal">'+esc(c.sentence || '')+'</td>';
+      html += '<td class="mono" style="text-align:right">'+esc(repeatWarmup)+'</td>';
+      html += '<td class="mono" style="text-align:right">'+esc(threshold)+'</td>';
+      html += '<td class="mono" style="text-align:right">'+esc(rtf)+'</td>';
+      html += '<td style="color:var(--txt2);font-size:.8rem">'+esc(tags)+'</td>';
+      html += '<td style="color:var(--txt2);font-size:.8rem">'+esc(c.notes || '')+'</td></tr>';
     });
     html += '</tbody></table></div></div>';
   }

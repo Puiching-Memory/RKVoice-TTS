@@ -19,6 +19,23 @@ CONFIG_LOCAL_DIR = WORKSPACE_ROOT / "config" / "local"
 BOARD_ENV_FILE = CONFIG_LOCAL_DIR / "board.local.env"
 DELIVERY_ENV_FILE = CONFIG_LOCAL_DIR / "delivery.local.env"
 AUDIOS_DIR = WORKSPACE_ROOT / "audios"
+RUNTIME_ROOT_DIR_NAME = "rkvoice_runtime"
+ASR_RUNTIME_SUBDIR_NAME = "asr"
+TTS_RUNTIME_SUBDIR_NAME = "tts"
+UNIFIED_RUNTIME_README = """# RKVoice Unified Runtime
+
+This runtime project ships the board-side offline speech stack under one root directory:
+
+- asr/: sherpa-onnx RK3588 streaming ASR component.
+- tts/: MeloTTS-RKNN2 offline TTS component.
+
+Typical board-side entrypoints:
+
+    ./asr/run_asr.sh
+    ./tts/run_tts.sh \"短波电台指令测试。\"
+
+Each component keeps its own tools/ and output/ directories so ASR and TTS can be rebuilt or redeployed independently without flattening their runtime layouts.
+"""
 
 # ---------------------------------------------------------------------------
 # ASR constants
@@ -26,15 +43,23 @@ AUDIOS_DIR = WORKSPACE_ROOT / "audios"
 
 ASR_TEMPLATE_ROOT = TEMPLATE_ROOT / "sherpa_onnx_rk3588"
 ASR_DEFAULT_STAGE_DIR = WORKSPACE_ROOT / "artifacts" / "source-bundles" / "sherpa_onnx_rk3588"
-ASR_DEFAULT_RUNTIME_DIR = WORKSPACE_ROOT / "artifacts" / "runtime" / "sherpa_onnx_rk3588_runtime"
+ASR_DEFAULT_RUNTIME_DIR = WORKSPACE_ROOT / "artifacts" / "runtime" / RUNTIME_ROOT_DIR_NAME
 ASR_DEFAULT_CACHE_DIR = WORKSPACE_ROOT / "artifacts" / "cache" / "sherpa_onnx_rk3588"
-ASR_DEFAULT_REMOTE_DIR = "/root/rkvoice/sherpa_onnx_rk3588_runtime"
+ASR_DEFAULT_REMOTE_DIR = f"/root/rkvoice/{RUNTIME_ROOT_DIR_NAME}"
 
 SHERPA_ONNX_RELEASE_TAG = "v1.12.37"
 SHERPA_ONNX_RUNTIME_ASSET_VERSION = "v1.12.36"
-STREAMING_RKNN_ZIPFORMER_VERSION = "2023-02-16"
+STREAMING_ZIPFORMER_VERSION = "2023-02-16"
+RKNN_TOOLKIT2_TARGET_PLATFORM = "rk3588"
+RKNN_TOOLKIT2_IMAGE_TAG = "rkvoice/rknn-toolkit2-profile:2.3.2-py312-onnx116"
 
 PREBUILT_RUNTIME_DIR_NAME = "sherpa-onnx-runtime"
+STREAMING_ONNX_ASR_SOURCE_DIR_NAME = f"sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-{STREAMING_ZIPFORMER_VERSION}"
+LEGACY_STREAMING_RKNN_ASSET_NAME = f"sherpa-onnx-rk3588-streaming-zipformer-small-bilingual-zh-en-{STREAMING_ZIPFORMER_VERSION}.tar.bz2"
+LEGACY_STREAMING_RKNN_ASSET_URL = (
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
+    f"{LEGACY_STREAMING_RKNN_ASSET_NAME}"
+)
 STREAMING_RKNN_ASR_DIR_NAME = "streaming-zipformer-rk3588-small"
 
 # ---------------------------------------------------------------------------
@@ -43,9 +68,9 @@ STREAMING_RKNN_ASR_DIR_NAME = "streaming-zipformer-rk3588-small"
 
 TTS_TEMPLATE_ROOT = TEMPLATE_ROOT / "melotts_rknn2"
 TTS_DEFAULT_STAGE_DIR = WORKSPACE_ROOT / "artifacts" / "source-bundles" / "melotts_rknn2"
-TTS_DEFAULT_RUNTIME_DIR = WORKSPACE_ROOT / "artifacts" / "runtime" / "melotts_rknn2_runtime"
+TTS_DEFAULT_RUNTIME_DIR = WORKSPACE_ROOT / "artifacts" / "runtime" / RUNTIME_ROOT_DIR_NAME
 TTS_DEFAULT_CACHE_DIR = WORKSPACE_ROOT / "artifacts" / "cache" / "melotts_rknn2"
-TTS_DEFAULT_REMOTE_DIR = "/root/rkvoice/melotts_rknn2_runtime"
+TTS_DEFAULT_REMOTE_DIR = f"/root/rkvoice/{RUNTIME_ROOT_DIR_NAME}"
 TTS_DEFAULT_TEXT = "你好，欢迎使用 RKVoice MeloTTS-RKNN2 离线语音服务。"
 
 MELOTTS_REPO_REF = "master"
@@ -113,14 +138,14 @@ ASR_ARTIFACTS: tuple[Artifact, ...] = (
         extracted_dir_name=PREBUILT_RUNTIME_DIR_NAME,
     ),
     Artifact(
-        name=f"sherpa-onnx-rk3588-streaming-zipformer-small-bilingual-zh-en-{STREAMING_RKNN_ZIPFORMER_VERSION}.tar.bz2",
+        name=f"{STREAMING_ONNX_ASR_SOURCE_DIR_NAME}.tar.bz2",
         url=(
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
-            f"sherpa-onnx-rk3588-streaming-zipformer-small-bilingual-zh-en-{STREAMING_RKNN_ZIPFORMER_VERSION}.tar.bz2"
+            f"{STREAMING_ONNX_ASR_SOURCE_DIR_NAME}.tar.bz2"
         ),
-        target_subdir="models/asr/streaming-rknn",
+        target_subdir="source-models/asr/streaming-onnx",
         strip_top_level=True,
-        extracted_dir_name=STREAMING_RKNN_ASR_DIR_NAME,
+        extracted_dir_name=STREAMING_ONNX_ASR_SOURCE_DIR_NAME,
     ),
 )
 
