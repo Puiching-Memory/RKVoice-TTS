@@ -4,7 +4,7 @@ from pathlib import Path
 
 from tests.test_support import WorkspaceTestCase
 
-from scripts.delivery.melotts_rknn2 import build_runtime_bundle, materialize_runtime_support_files
+from scripts.delivery.tts import build_runtime_bundle, materialize_runtime_support_files
 
 
 class MeloTtsDeliveryTests(WorkspaceTestCase):

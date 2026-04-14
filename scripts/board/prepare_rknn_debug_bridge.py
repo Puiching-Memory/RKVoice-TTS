@@ -18,13 +18,13 @@ from typing import Sequence
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
 try:
-    from scripts.delivery.sherpa_onnx_rk3588.config import load_local_settings, resolve_int_option, resolve_required_text_option, resolve_text_option
-    from scripts.delivery.sherpa_onnx_rk3588.remote import guess_source_ip, open_ssh_client, run_remote_command, sh_quote, upload_file
+    from scripts.delivery.config import load_local_settings, resolve_int_option, resolve_required_text_option, resolve_text_option
+    from scripts.delivery.remote import guess_source_ip, open_ssh_client, run_remote_command, sh_quote, upload_file
 except ImportError:
     if str(WORKSPACE_ROOT) not in sys.path:
         sys.path.insert(0, str(WORKSPACE_ROOT))
-    from scripts.delivery.sherpa_onnx_rk3588.config import load_local_settings, resolve_int_option, resolve_required_text_option, resolve_text_option
-    from scripts.delivery.sherpa_onnx_rk3588.remote import guess_source_ip, open_ssh_client, run_remote_command, sh_quote, upload_file
+    from scripts.delivery.config import load_local_settings, resolve_int_option, resolve_required_text_option, resolve_text_option
+    from scripts.delivery.remote import guess_source_ip, open_ssh_client, run_remote_command, sh_quote, upload_file
 
 
 DEFAULT_ADBD_ZIP_URL = "https://ftzr.zbox.filez.com/v2/delivery/data/7f0ac30dfa474892841fcb2cd29ad924/adbd.zip"

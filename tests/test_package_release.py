@@ -49,7 +49,7 @@ class PackageReleaseTests(WorkspaceTestCase):
             self.assertIn("包=rk3588-asr-tts-delivery", release_notes)
             self.assertIn("版本=v1.0.0", release_notes)
             self.assertIn("Version=v1.0.0", manifest)
-            self.assertIn("IncludeRuntimeBundle=False", manifest)
+            self.assertIn("IncludeAsrRuntimeBundle=False", manifest)
             self.assertIn("- scripts", manifest)
 
             with zipfile.ZipFile(result.zip_path) as archive:
@@ -89,10 +89,10 @@ class PackageReleaseTests(WorkspaceTestCase):
                 package_name="demo package",
                 version="release candidate",
                 release_notes_path=str(workspace_root / "custom_release_notes.md"),
-                include_runtime_bundle=True,
-                include_evidence=True,
-                include_melo_runtime_bundle=True,
-                include_melo_evidence=True,
+                include_asr_runtime_bundle=True,
+                include_asr_evidence=True,
+                include_tts_runtime_bundle=True,
+                include_tts_evidence=True,
             )
 
             self.assertTrue(
@@ -134,8 +134,8 @@ class PackageReleaseTests(WorkspaceTestCase):
             manifest = result.manifest_path.read_text(encoding="utf-8")
             release_notes = (result.release_dir / "RELEASE_NOTES.md").read_text(encoding="utf-8")
             self.assertIn("PackageLabel=demo-package", manifest)
-            self.assertIn("IncludeRuntimeBundle=True", manifest)
-            self.assertIn("IncludeEvidence=True", manifest)
-            self.assertIn("IncludeMeloRuntimeBundle=True", manifest)
-            self.assertIn("IncludeMeloEvidence=True", manifest)
+            self.assertIn("IncludeAsrRuntimeBundle=True", manifest)
+            self.assertIn("IncludeAsrEvidence=True", manifest)
+            self.assertIn("IncludeTtsRuntimeBundle=True", manifest)
+            self.assertIn("IncludeTtsEvidence=True", manifest)
             self.assertIn("自定义版本=release candidate", release_notes)

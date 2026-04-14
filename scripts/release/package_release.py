@@ -24,14 +24,12 @@ BASE_ITEMS = (
     "docs",
     "scripts",
 )
-SHERPA_RUNTIME_DIR_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime"
-SHERPA_RUNTIME_BUNDLE_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime.tar.gz"
-SHERPA_EVIDENCE_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime\\output"
-MELO_RUNTIME_DIR_RELATIVE_PATH = "artifacts\\runtime\\melotts_rknn2_runtime"
-MELO_RUNTIME_BUNDLE_RELATIVE_PATH = "artifacts\\runtime\\melotts_rknn2_runtime.tar.gz"
-MELO_EVIDENCE_RELATIVE_PATH = "artifacts\\runtime\\melotts_rknn2_runtime\\output"
-RUNTIME_BUNDLE_RELATIVE_PATH = SHERPA_RUNTIME_BUNDLE_RELATIVE_PATH
-EVIDENCE_RELATIVE_PATH = SHERPA_EVIDENCE_RELATIVE_PATH
+ASR_RUNTIME_DIR_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime"
+ASR_RUNTIME_BUNDLE_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime.tar.gz"
+ASR_EVIDENCE_RELATIVE_PATH = "artifacts\\runtime\\sherpa_onnx_rk3588_runtime\\output"
+TTS_RUNTIME_DIR_RELATIVE_PATH = "artifacts\\runtime\\melotts_rknn2_runtime"
+TTS_RUNTIME_BUNDLE_RELATIVE_PATH = "artifacts\\runtime\\melotts_rknn2_runtime.tar.gz"
+TTS_EVIDENCE_RELATIVE_PATH = "artifacts\\runtime\\melotts_rknn2_runtime\\output"
 INVALID_PATH_SEGMENT_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 WHITESPACE_PATTERN = re.compile(r"\s+")
 
@@ -167,10 +165,10 @@ def write_release_manifest(
     release_notes_source: Path,
     release_dir: Path,
     zip_path: Path,
-    include_runtime_bundle: bool,
-    include_evidence: bool,
-    include_melo_runtime_bundle: bool,
-    include_melo_evidence: bool,
+    include_asr_runtime_bundle: bool,
+    include_asr_evidence: bool,
+    include_tts_runtime_bundle: bool,
+    include_tts_evidence: bool,
     included_items: Sequence[str],
 ) -> None:
     lines = [
@@ -184,10 +182,10 @@ def write_release_manifest(
         f"ReleaseNotesSource={release_notes_source}",
         f"ReleaseDirectory={release_dir}",
         f"ZipPath={zip_path}",
-        f"IncludeRuntimeBundle={include_runtime_bundle}",
-        f"IncludeEvidence={include_evidence}",
-        f"IncludeMeloRuntimeBundle={include_melo_runtime_bundle}",
-        f"IncludeMeloEvidence={include_melo_evidence}",
+        f"IncludeAsrRuntimeBundle={include_asr_runtime_bundle}",
+        f"IncludeAsrEvidence={include_asr_evidence}",
+        f"IncludeTtsRuntimeBundle={include_tts_runtime_bundle}",
+        f"IncludeTtsEvidence={include_tts_evidence}",
         "",
         "IncludedItems:",
     ]
@@ -221,10 +219,10 @@ def build_release(
     package_name: str = DEFAULT_PACKAGE_NAME,
     version: str = "",
     release_notes_path: str | None = None,
-    include_runtime_bundle: bool = False,
-    include_evidence: bool = False,
-    include_melo_runtime_bundle: bool = False,
-    include_melo_evidence: bool = False,
+    include_asr_runtime_bundle: bool = False,
+    include_asr_evidence: bool = False,
+    include_tts_runtime_bundle: bool = False,
+    include_tts_evidence: bool = False,
 ) -> ReleasePackageResult:
     workspace_root = workspace_root.resolve()
     resolved_output_root = (output_root or DEFAULT_OUTPUT_ROOT).resolve()
@@ -267,39 +265,39 @@ def build_release(
     )
     included_items.append("RELEASE_NOTES.md")
 
-    if include_runtime_bundle:
+    if include_asr_runtime_bundle:
         copy_or_archive_runtime_bundle(
-            archive_relative_path=SHERPA_RUNTIME_BUNDLE_RELATIVE_PATH,
-            runtime_dir_relative_path=SHERPA_RUNTIME_DIR_RELATIVE_PATH,
+            archive_relative_path=ASR_RUNTIME_BUNDLE_RELATIVE_PATH,
+            runtime_dir_relative_path=ASR_RUNTIME_DIR_RELATIVE_PATH,
             workspace_root=workspace_root,
             release_dir=release_dir,
         )
-        included_items.append(SHERPA_RUNTIME_BUNDLE_RELATIVE_PATH)
+        included_items.append(ASR_RUNTIME_BUNDLE_RELATIVE_PATH)
 
-    if include_evidence:
+    if include_asr_evidence:
         copy_required_workspace_item(
-            relative_path=SHERPA_EVIDENCE_RELATIVE_PATH,
+            relative_path=ASR_EVIDENCE_RELATIVE_PATH,
             workspace_root=workspace_root,
             release_dir=release_dir,
         )
-        included_items.append(SHERPA_EVIDENCE_RELATIVE_PATH)
+        included_items.append(ASR_EVIDENCE_RELATIVE_PATH)
 
-    if include_melo_runtime_bundle:
+    if include_tts_runtime_bundle:
         copy_or_archive_runtime_bundle(
-            archive_relative_path=MELO_RUNTIME_BUNDLE_RELATIVE_PATH,
-            runtime_dir_relative_path=MELO_RUNTIME_DIR_RELATIVE_PATH,
+            archive_relative_path=TTS_RUNTIME_BUNDLE_RELATIVE_PATH,
+            runtime_dir_relative_path=TTS_RUNTIME_DIR_RELATIVE_PATH,
             workspace_root=workspace_root,
             release_dir=release_dir,
         )
-        included_items.append(MELO_RUNTIME_BUNDLE_RELATIVE_PATH)
+        included_items.append(TTS_RUNTIME_BUNDLE_RELATIVE_PATH)
 
-    if include_melo_evidence:
+    if include_tts_evidence:
         copy_required_workspace_item(
-            relative_path=MELO_EVIDENCE_RELATIVE_PATH,
+            relative_path=TTS_EVIDENCE_RELATIVE_PATH,
             workspace_root=workspace_root,
             release_dir=release_dir,
         )
-        included_items.append(MELO_EVIDENCE_RELATIVE_PATH)
+        included_items.append(TTS_EVIDENCE_RELATIVE_PATH)
 
     manifest_path = release_dir / "RELEASE_MANIFEST.md"
     write_release_manifest(
@@ -312,10 +310,10 @@ def build_release(
         release_notes_source=release_notes_source,
         release_dir=release_dir,
         zip_path=zip_path,
-        include_runtime_bundle=include_runtime_bundle,
-        include_evidence=include_evidence,
-        include_melo_runtime_bundle=include_melo_runtime_bundle,
-        include_melo_evidence=include_melo_evidence,
+        include_asr_runtime_bundle=include_asr_runtime_bundle,
+        include_asr_evidence=include_asr_evidence,
+        include_tts_runtime_bundle=include_tts_runtime_bundle,
+        include_tts_evidence=include_tts_evidence,
         included_items=included_items,
     )
     create_zip_archive(release_dir=release_dir, zip_path=zip_path)
@@ -346,24 +344,32 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Custom release notes template or rendered notes source",
     )
     parser.add_argument(
+        "--include-asr-runtime-bundle",
+        "--IncludeAsrRuntimeBundle",
         "--include-runtime-bundle",
         "--IncludeRuntimeBundle",
         action="store_true",
         help="Include artifacts/runtime/sherpa_onnx_rk3588_runtime.tar.gz",
     )
     parser.add_argument(
+        "--include-asr-evidence",
+        "--IncludeAsrEvidence",
         "--include-evidence",
         "--IncludeEvidence",
         action="store_true",
         help="Include artifacts/runtime/sherpa_onnx_rk3588_runtime/output",
     )
     parser.add_argument(
+        "--include-tts-runtime-bundle",
+        "--IncludeTtsRuntimeBundle",
         "--include-melo-runtime-bundle",
         "--IncludeMeloRuntimeBundle",
         action="store_true",
         help="Include artifacts/runtime/melotts_rknn2_runtime.tar.gz",
     )
     parser.add_argument(
+        "--include-tts-evidence",
+        "--IncludeTtsEvidence",
         "--include-melo-evidence",
         "--IncludeMeloEvidence",
         action="store_true",
@@ -380,10 +386,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             package_name=args.package_name,
             version=args.version,
             release_notes_path=args.release_notes_path or None,
-            include_runtime_bundle=args.include_runtime_bundle,
-            include_evidence=args.include_evidence,
-            include_melo_runtime_bundle=args.include_melo_runtime_bundle,
-            include_melo_evidence=args.include_melo_evidence,
+            include_asr_runtime_bundle=args.include_asr_runtime_bundle,
+            include_asr_evidence=args.include_asr_evidence,
+            include_tts_runtime_bundle=args.include_tts_runtime_bundle,
+            include_tts_evidence=args.include_tts_evidence,
         )
     except ReleasePackagingError as exc:
         print(str(exc), file=sys.stderr)

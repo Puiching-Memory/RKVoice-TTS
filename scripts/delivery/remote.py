@@ -8,8 +8,6 @@ from pathlib import Path
 import paramiko
 
 from .shared import ensure_parent, fail, log, write_text
-from .source_bundle import materialize_runtime_support_files
-from .runtime_bundle import runtime_bundle_required_paths
 
 
 def create_bundle_tarball(local_dir: Path, remote_dir: str) -> Path:
@@ -105,68 +103,3 @@ def run_remote_command(client: paramiko.SSHClient, command: str, *, timeout: int
 
 def sh_quote(value: str) -> str:
     return "'" + value.replace("'", "'\\''") + "'"
-
-
-def deploy_runtime_bundle(
-    runtime_dir: Path,
-    remote_dir: str,
-    *,
-    host: str,
-    username: str,
-    password: str,
-    source_ip: str | None,
-    ssh_timeout: int,
-    remote_timeout: int,
-    sentence: str,
-    skip_smoketest: bool,
-) -> None:
-    for required_path in runtime_bundle_required_paths(runtime_dir):
-        if not required_path.exists():
-            fail(f"Runtime bundle is missing required artifact: {required_path}")
-
-    materialize_runtime_support_files(runtime_dir)
-
-    client = open_ssh_client(host, username, password, source_ip=source_ip, timeout=ssh_timeout)
-    local_output_dir = runtime_dir / "output"
-    local_output_dir.mkdir(parents=True, exist_ok=True)
-    tarball_path = create_bundle_tarball(runtime_dir, remote_dir)
-    remote_parent = str(Path(remote_dir).parent).replace("\\", "/")
-    remote_tarball = f"{remote_parent}/{Path(tarball_path.name).name}"
-    try:
-        log(f"Uploading runtime tarball to {remote_tarball}")
-        run_remote_command(client, f"mkdir -p {sh_quote(remote_parent)}", timeout=remote_timeout)
-        upload_file(client, tarball_path, remote_tarball)
-        run_remote_command(
-            client,
-            f"rm -rf {sh_quote(remote_dir)} && tar -xzf {sh_quote(remote_tarball)} -C {sh_quote(remote_parent)}",
-            timeout=remote_timeout,
-        )
-        run_remote_command(
-            client,
-            f"find {sh_quote(remote_dir)} -type f -name '*.sh' -exec chmod +x {{}} + && chmod +x {sh_quote(remote_dir)}/bin/paddlespeech_tts_demo {sh_quote(remote_dir)}/bin/rkvoice_tts_demo",
-            timeout=remote_timeout,
-        )
-        if not skip_smoketest:
-            log("Running remote smoke test")
-            remote_output_wav = "./output/smoke_test.wav"
-            remote_output_log = "./output/smoke_test.log"
-            smoke_test_command = (
-                "set -o pipefail; "
-                "mkdir -p ./output; "
-                f"./smoketest.sh {sh_quote(sentence)} {sh_quote(remote_output_wav)} 2>&1 | tee {sh_quote(remote_output_log)}"
-            )
-            smoke_test_output = run_remote_command(
-                client,
-                f"cd {sh_quote(remote_dir)} && bash -lc {sh_quote(smoke_test_command)}",
-                timeout=remote_timeout,
-            )
-            local_log_path = local_output_dir / "smoke_test.log"
-            write_text(local_log_path, smoke_test_output)
-            remote_output_dir = f"{remote_dir.rstrip('/')}/output"
-            local_wav_path = local_output_dir / "smoke_test.wav"
-            download_file(client, f"{remote_output_dir}/smoke_test.wav", local_wav_path)
-            download_file(client, f"{remote_output_dir}/smoke_test.log", local_log_path)
-            log(f"Downloaded smoke test audio to {local_wav_path}")
-            log(f"Downloaded smoke test log to {local_log_path}")
-    finally:
-        client.close()

@@ -26,8 +26,9 @@ class RKVoiceReportTests(WorkspaceTestCase):
             wav_file.setframerate(frame_rate)
             wav_file.writeframes(b"\x00\x00" * frame_count)
 
-    def _create_workspace(self, workspace_root: Path) -> Path:
+    def _create_workspace(self, workspace_root: Path) -> tuple[Path, Path]:
         runtime_dir = workspace_root / "artifacts" / "runtime" / "sherpa_onnx_rk3588_runtime"
+        tts_runtime_dir = workspace_root / "artifacts" / "runtime" / "melotts_rknn2_runtime"
         output_dir = runtime_dir / "output"
 
         self._create_file(
@@ -84,17 +85,17 @@ class RKVoiceReportTests(WorkspaceTestCase):
             ),
         )
         self._create_file(
-            runtime_dir / "run_tts.sh",
-            "#!/bin/bash\nexec ./bin/sherpa-onnx-offline-tts --vits-model=./models/tts/vits-icefall-zh-aishell3/model.onnx\n",
+            tts_runtime_dir / "run_tts.sh",
+            '#!/bin/bash\nexec python3 "$SCRIPT_DIR/melotts_rknn.py" --decoder-model "$SCRIPT_DIR/decoder.rknn" --encoder-model "$SCRIPT_DIR/encoder.onnx"\n',
         )
+        self._create_binary(tts_runtime_dir / "decoder.rknn", 2048)
+        self._create_binary(tts_runtime_dir / "encoder.onnx", 1024)
         self._create_file(
             runtime_dir / "run_asr.sh",
             '#!/bin/bash\nASR_MODE="${RKVOICE_ASR_MODE:-streaming}"\nexec ./bin/sherpa-onnx --encoder=./models/asr/streaming/streaming-zipformer-multi-zh-hans/encoder-epoch-20-avg-1-chunk-16-left-128.int8.onnx\n',
         )
         self._create_file(runtime_dir / "bin" / "sherpa-onnx", "binary\n")
         self._create_file(runtime_dir / "bin" / "sherpa-onnx-offline", "binary\n")
-        self._create_file(runtime_dir / "bin" / "sherpa-onnx-offline-tts", "binary\n")
-        self._create_binary(runtime_dir / "models" / "tts" / "vits-icefall-zh-aishell3" / "model.onnx", 1024)
         self._create_binary(runtime_dir / "models" / "asr" / "cpu" / "sense-voice" / "model.int8.onnx", 1024)
         self._create_binary(runtime_dir / "models" / "asr" / "rknn" / "sense-voice-rk3588-20s" / "model.rknn", 1024)
         self._create_binary(runtime_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "encoder-epoch-20-avg-1-chunk-16-left-128.int8.onnx", 67 * 1024 * 1024)
@@ -103,23 +104,30 @@ class RKVoiceReportTests(WorkspaceTestCase):
         self._create_file(runtime_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "tokens.txt", "tokens\n")
         self._create_file(
             output_dir / "smoke_test_summary.log",
-            """[0/4] Board capability snapshot
-[1/4] CPU TTS smoke test
-Elapsed seconds: 0.353 s
-Audio duration: 3.030 s
-Real-time factor (RTF): 0.353/3.030 = 0.117
-The text is: 你好，欢迎使用离线语音合成服务。. Speaker ID: 66
-[2/4] Streaming ASR smoke test
+            """[0/5] Board capability snapshot
+[1/5] RKNN TTS cold start
+load models take 1850.99ms
+encoder run take 59.97ms
+Sentence[6] Slice[0]: decoder run take 193.74ms
+Sentence[11] Slice[1]: decoder run take 191.75ms
+Sentence[16] Slice[2]: decoder run take 191.61ms
+[2/5] RKNN TTS warm run
+load models take 132.40ms
+encoder run take 53.40ms
+Sentence[6] Slice[0]: decoder run take 174.96ms
+Sentence[11] Slice[1]: decoder run take 172.33ms
+Sentence[16] Slice[2]: decoder run take 171.01ms
+[3/5] RKNN TTS profile run
+load models take 140.20ms
+encoder run take 54.10ms
+Sentence[6] Slice[0]: decoder run take 194.96ms
+Sentence[11] Slice[1]: decoder run take 192.33ms
+Sentence[16] Slice[2]: decoder run take 194.01ms
+[4/5] Streaming ASR (RKNN) smoke test
 Elapsed seconds: 0.125 s
 Real time factor (RTF): 0.125 / 5.592 = 0.022
 {"text":"开放时间早上九点至下午五点"}
-[3/4] CPU offline ASR smoke test
-Elapsed seconds: 0.343 s
-Real time factor (RTF): 0.343 / 5.592 = 0.061
-[4/4] RKNN ASR smoke test
-Elapsed seconds: 0.855 s
-Real time factor (RTF): 0.855 / 5.592 = 0.153
-{"text":"开放时间早上九点至下午五点"}
+[5/5] Completed
 """,
         )
         self._create_file(
@@ -197,18 +205,19 @@ class DemoTests(unittest.TestCase):
 """,
         )
         self._create_file(workspace_root / "tests" / "__init__.py", "")
-        return runtime_dir
+        return runtime_dir, tts_runtime_dir
 
-    def test_build_report_generates_dashboard_json_audio_and_heatmap(self) -> None:
+    def test_build_report_generates_dashboard_json_and_distinguishes_tts_runs(self) -> None:
         with self.temp_dir("rkvoice_report_") as temp_dir:
             workspace_root = temp_dir / "workspace"
             output_root = temp_dir / "reports"
-            runtime_dir = self._create_workspace(workspace_root)
+            runtime_dir, tts_runtime_dir = self._create_workspace(workspace_root)
 
             result = build_report(
                 workspace_root=workspace_root,
                 output_root=output_root,
                 runtime_dir=runtime_dir,
+                tts_runtime_dir=tts_runtime_dir,
                 run_unittests=True,
             )
 
@@ -216,12 +225,22 @@ class DemoTests(unittest.TestCase):
             self.assertTrue(result.json_path.exists())
             self.assertTrue((result.report_dir / "assets" / "smoke_test_tts.wav").exists())
             self.assertTrue((result.report_dir / "assets" / "asr-rknpu-load-heatmap.svg").exists())
+            self.assertFalse((result.report_dir / "assets" / "tts-profile-heatmap.svg").exists())
 
             payload = json.loads(result.json_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["unit_tests"]["total"], 2)
             self.assertEqual(payload["unit_tests"]["passed"], 2)
+            self.assertEqual(payload["runtime"]["tts_backend"], "melotts-rknn")
+            self.assertEqual(payload["runtime"]["tts_model_name"], "MeloTTS-RKNN2")
+            self.assertIsNotNone(payload["runtime"]["tts_decoder_rknn_size_mib"])
+            self.assertIsNotNone(payload["runtime"]["tts_encoder_onnx_size_mib"])
             self.assertEqual(payload["summary"]["verdict"], "fail")
             self.assertEqual(payload["observed"]["rknn_profile_source"], "eval_perf")
+            self.assertEqual(payload["observed"]["tts_elapsed_basis"], "warm_run")
+            self.assertAlmostEqual(payload["observed"]["tts_cold_start_elapsed_ms"], 637.0, places=3)
+            self.assertAlmostEqual(payload["observed"]["tts_warm_run_elapsed_ms"], 571.7, places=3)
+            self.assertAlmostEqual(payload["observed"]["tts_profile_run_elapsed_ms"], 588.4, places=3)
+            self.assertAlmostEqual(payload["observed"]["tts_elapsed_ms"], 571.7, places=3)
             self.assertEqual(payload["evidence"]["rknn_perf"]["operator_count"], 2)
             self.assertEqual(payload["evidence"]["rknn_perf"]["ranking"][0]["op_type"], "ConvRelu")
             self.assertAlmostEqual(payload["observed"]["rknn_run_duration_ms"], 12.345, places=3)
@@ -229,6 +248,7 @@ class DemoTests(unittest.TestCase):
 
             requirements = {item["requirement"]: item for item in payload["requirements"]["items"]}
             self.assertEqual(requirements["NPU 加速下，单句中文语音合成端到端延迟 ≤ 150 ms。"]["status"], "fail")
+            self.assertIn("warm run", requirements["NPU 加速下，单句中文语音合成端到端延迟 ≤ 150 ms。"]["observed"])
             self.assertEqual(requirements["支持流式识别。"]["status"], "pass")
             self.assertEqual(requirements["系统整体全程离线独立工作，无任何外部网络依赖。"]["status"], "pass")
             self.assertEqual(requirements["通信指令、数字、字母发音准确无歧义。"]["status"], "partial")
@@ -238,7 +258,9 @@ class DemoTests(unittest.TestCase):
             self.assertIn("report-data", html_report)
             self.assertIn("RKVoice", html_report)
             self.assertIn("ASR RKNN NPU Load Heatmap", html_report)
+            self.assertIn("TTS Warm Run", html_report)
             self.assertIn("Toolkit2 eval_perf()", html_report)
+            self.assertNotIn("TTS Profile Heatmap", html_report)
 
     def test_parse_rknn_perf_text_supports_toolkit2_232_format(self) -> None:
         with self.temp_dir("rkvoice_perf_text_") as temp_dir:

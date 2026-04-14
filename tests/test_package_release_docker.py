@@ -30,10 +30,10 @@ class PackageReleaseDockerTests(WorkspaceTestCase):
             package_name="demo-package",
             version="v1.2.3",
             release_notes_path=None,
-            include_runtime_bundle=True,
-            include_evidence=True,
-            include_melo_runtime_bundle=True,
-            include_melo_evidence=True,
+            include_asr_runtime_bundle=True,
+            include_asr_evidence=True,
+            include_tts_runtime_bundle=True,
+            include_tts_evidence=True,
         )
 
         self.assertEqual(command[0:3], ["docker", "run", "--rm"])
@@ -43,10 +43,10 @@ class PackageReleaseDockerTests(WorkspaceTestCase):
         self.assertIn("demo-package", command)
         self.assertIn("--version", command)
         self.assertIn("v1.2.3", command)
-        self.assertIn("--include-runtime-bundle", command)
-        self.assertIn("--include-evidence", command)
-        self.assertIn("--include-melo-runtime-bundle", command)
-        self.assertIn("--include-melo-evidence", command)
+        self.assertIn("--include-asr-runtime-bundle", command)
+        self.assertIn("--include-asr-evidence", command)
+        self.assertIn("--include-tts-runtime-bundle", command)
+        self.assertIn("--include-tts-evidence", command)
 
     def test_build_docker_run_command_mounts_external_paths(self) -> None:
         with self.temp_dir("rkvoice_release_docker_") as temp_dir:
@@ -66,10 +66,10 @@ class PackageReleaseDockerTests(WorkspaceTestCase):
                 package_name="demo-package",
                 version="",
                 release_notes_path=external_release_notes,
-                include_runtime_bundle=False,
-                include_evidence=False,
-                include_melo_runtime_bundle=False,
-                include_melo_evidence=False,
+                include_asr_runtime_bundle=False,
+                include_asr_evidence=False,
+                include_tts_runtime_bundle=False,
+                include_tts_evidence=False,
             )
 
             self.assertIn("/mnt/external/0/out/releases", command)

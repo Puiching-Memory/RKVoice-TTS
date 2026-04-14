@@ -4,7 +4,8 @@ from pathlib import Path
 
 from tests.test_support import WorkspaceTestCase
 
-from scripts.delivery.sherpa_onnx_rk3588 import build_runtime_bundle, materialize_runtime_support_files
+from scripts.delivery.asr import build_runtime_bundle, materialize_runtime_support_files
+from scripts.delivery.config import AUDIOS_DIR
 
 
 class SherpaOnnxDeliveryTests(WorkspaceTestCase):
@@ -14,32 +15,14 @@ class SherpaOnnxDeliveryTests(WorkspaceTestCase):
 
     def _create_stage_bundle(self, stage_dir: Path) -> None:
         self._create_file(stage_dir / "prebuilt" / "sherpa-onnx-runtime" / "bin" / "sherpa-onnx", "binary\n")
-        self._create_file(stage_dir / "prebuilt" / "sherpa-onnx-runtime" / "bin" / "sherpa-onnx-offline", "binary\n")
-        self._create_file(stage_dir / "prebuilt" / "sherpa-onnx-runtime" / "bin" / "sherpa-onnx-offline-tts", "binary\n")
         self._create_file(stage_dir / "prebuilt" / "sherpa-onnx-runtime" / "lib" / "libsherpa-onnx-c-api.so", "shared\n")
         self._create_file(stage_dir / "prebuilt" / "sherpa-onnx-runtime" / "lib" / "libonnxruntime.so", "shared\n")
         self._create_file(stage_dir / "prebuilt" / "sherpa-onnx-runtime" / "include" / "sherpa-onnx" / "c-api" / "c-api.h", "header\n")
 
-        self._create_file(stage_dir / "models" / "asr" / "cpu" / "sense-voice" / "model.int8.onnx", "model\n")
-        self._create_file(stage_dir / "models" / "asr" / "cpu" / "sense-voice" / "tokens.txt", "tokens\n")
-        self._create_file(stage_dir / "models" / "asr" / "cpu" / "sense-voice" / "test_wavs" / "zh.wav", "wav\n")
-
-        self._create_file(stage_dir / "models" / "asr" / "rknn" / "sense-voice-rk3588-20s" / "model.rknn", "model\n")
-        self._create_file(stage_dir / "models" / "asr" / "rknn" / "sense-voice-rk3588-20s" / "tokens.txt", "tokens\n")
-        self._create_file(stage_dir / "models" / "asr" / "rknn" / "sense-voice-rk3588-20s" / "test_wavs" / "zh.wav", "wav\n")
-
-        self._create_file(stage_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "encoder-epoch-20-avg-1-chunk-16-left-128.int8.onnx", "model\n")
-        self._create_file(stage_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "decoder-epoch-20-avg-1-chunk-16-left-128.onnx", "model\n")
-        self._create_file(stage_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "joiner-epoch-20-avg-1-chunk-16-left-128.int8.onnx", "model\n")
-        self._create_file(stage_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "tokens.txt", "tokens\n")
-        self._create_file(stage_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "test_wavs" / "DEV_T0000000000.wav", "wav\n")
-
-        self._create_file(stage_dir / "models" / "tts" / "vits-icefall-zh-aishell3" / "model.onnx", "model\n")
-        self._create_file(stage_dir / "models" / "tts" / "vits-icefall-zh-aishell3" / "lexicon.txt", "lexicon\n")
-        self._create_file(stage_dir / "models" / "tts" / "vits-icefall-zh-aishell3" / "tokens.txt", "tokens\n")
-        self._create_file(stage_dir / "models" / "tts" / "vits-icefall-zh-aishell3" / "phone.fst", "fst\n")
-        self._create_file(stage_dir / "models" / "tts" / "vits-icefall-zh-aishell3" / "date.fst", "fst\n")
-        self._create_file(stage_dir / "models" / "tts" / "vits-icefall-zh-aishell3" / "number.fst", "fst\n")
+        self._create_file(stage_dir / "models" / "asr" / "streaming-rknn" / "streaming-zipformer-rk3588-small" / "encoder.rknn", "model\n")
+        self._create_file(stage_dir / "models" / "asr" / "streaming-rknn" / "streaming-zipformer-rk3588-small" / "decoder.rknn", "model\n")
+        self._create_file(stage_dir / "models" / "asr" / "streaming-rknn" / "streaming-zipformer-rk3588-small" / "joiner.rknn", "model\n")
+        self._create_file(stage_dir / "models" / "asr" / "streaming-rknn" / "streaming-zipformer-rk3588-small" / "tokens.txt", "tokens\n")
 
     def test_materialize_runtime_support_files_writes_runtime_layout(self) -> None:
         with self.temp_dir("rkvoice_sherpa_runtime_") as temp_dir:
@@ -49,32 +32,23 @@ class SherpaOnnxDeliveryTests(WorkspaceTestCase):
 
             self.assertTrue((runtime_dir / "README_SDK.md").exists())
             self.assertTrue((runtime_dir / "run_asr.sh").exists())
-            self.assertTrue((runtime_dir / "run_tts.sh").exists())
             self.assertTrue((runtime_dir / "smoketest.sh").exists())
             self.assertTrue((runtime_dir / "tools" / "check_rknn_env.sh").exists())
             self.assertTrue((runtime_dir / "tools" / "board_profile_capabilities.sh").exists())
-            self.assertTrue((runtime_dir / "tools" / "profile_tts_inference.sh").exists())
 
             run_asr = (runtime_dir / "run_asr.sh").read_text(encoding="utf-8")
-            run_tts = (runtime_dir / "run_tts.sh").read_text(encoding="utf-8")
             smoketest = (runtime_dir / "smoketest.sh").read_text(encoding="utf-8")
             profile_script = (runtime_dir / "tools" / "profile_asr_inference.sh").read_text(encoding="utf-8")
-            tts_profile_script = (runtime_dir / "tools" / "profile_tts_inference.sh").read_text(encoding="utf-8")
 
-            self.assertIn("RKVOICE_ASR_PROVIDER", run_asr)
-            self.assertIn("RKVOICE_ASR_MODE", run_asr)
-            self.assertIn("sherpa-onnx-offline", run_asr)
-            self.assertIn("streaming-zipformer-multi-zh-hans", run_asr)
-            self.assertIn("sherpa-onnx-offline-tts", run_tts)
-            self.assertIn("vits-icefall-zh-aishell3", run_tts)
-            self.assertIn("RKVOICE_ENABLE_RKNN_SMOKETEST", smoketest)
+            self.assertIn("--provider=rknn", run_asr)
+            self.assertIn("streaming-zipformer-rk3588-small", run_asr)
+            self.assertIn("audios", run_asr)
             self.assertIn("./tools/check_rknn_env.sh", smoketest)
-            self.assertIn("RKVOICE_ASR_PROVIDER=rknn", profile_script)
+            self.assertIn("audios", smoketest)
+            self.assertIn("run_asr.sh", profile_script)
             self.assertIn("RKNN_LOG_LEVEL", profile_script)
             self.assertIn("rknn_runtime.log", profile_script)
             self.assertIn("rknpu_load.log", profile_script)
-            self.assertIn("RKVOICE_TTS_OUTPUT_WAV", tts_profile_script)
-            self.assertIn('"$RUNTIME_DIR/run_tts.sh" "$sentence"', tts_profile_script)
 
     def test_build_runtime_bundle_assembles_prebuilt_assets(self) -> None:
         with self.temp_dir("rkvoice_sherpa_bundle_") as temp_dir:
@@ -85,13 +59,10 @@ class SherpaOnnxDeliveryTests(WorkspaceTestCase):
             build_runtime_bundle(stage_dir, runtime_dir, force=False)
 
             self.assertTrue((runtime_dir / "bin" / "sherpa-onnx").exists())
-            self.assertTrue((runtime_dir / "bin" / "sherpa-onnx-offline").exists())
-            self.assertTrue((runtime_dir / "bin" / "sherpa-onnx-offline-tts").exists())
             self.assertTrue((runtime_dir / "lib" / "libsherpa-onnx-c-api.so").exists())
             self.assertTrue((runtime_dir / "include" / "sherpa-onnx" / "c-api" / "c-api.h").exists())
-            self.assertTrue((runtime_dir / "models" / "asr" / "cpu" / "sense-voice" / "test_wavs" / "zh.wav").exists())
-            self.assertTrue((runtime_dir / "models" / "asr" / "rknn" / "sense-voice-rk3588-20s" / "model.rknn").exists())
-            self.assertTrue((runtime_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans" / "encoder-epoch-20-avg-1-chunk-16-left-128.int8.onnx").exists())
-            self.assertTrue((runtime_dir / "models" / "tts" / "vits-icefall-zh-aishell3" / "model.onnx").exists())
+            self.assertTrue((runtime_dir / "models" / "asr" / "streaming-rknn" / "streaming-zipformer-rk3588-small" / "encoder.rknn").exists())
+            self.assertTrue((runtime_dir / "audios").exists())
+            self.assertTrue(any((runtime_dir / "audios").glob("*.wav")))
             self.assertTrue((runtime_dir / "smoketest.sh").exists())
             self.assertTrue((runtime_dir / "tools" / "check_rknn_env.sh").exists())

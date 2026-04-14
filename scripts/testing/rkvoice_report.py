@@ -23,16 +23,20 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_ROOT = WORKSPACE_ROOT / "artifacts" / "test-runs"
 DEFAULT_RUNTIME_DIR = WORKSPACE_ROOT / "artifacts" / "runtime" / "sherpa_onnx_rk3588_runtime"
+DEFAULT_TTS_RUNTIME_DIR = WORKSPACE_ROOT / "artifacts" / "runtime" / "melotts_rknn2_runtime"
 DEFAULT_REQUIREMENTS_PATH = WORKSPACE_ROOT / "docs" / "requirements" / "项目指标.md"
 DEFAULT_LOCAL_PLAN_PATH = WORKSPACE_ROOT / "config" / "local" / "tts_test_plan.json"
 DEFAULT_EXAMPLE_PLAN_PATH = WORKSPACE_ROOT / "config" / "examples" / "tts_test_plan.example.json"
 REPORT_TEMPLATE_DIR = Path(__file__).with_name("report_templates")
 REPORT_TEMPLATE_NAME = "rkvoice_report.html.j2"
 
-ELAPSED_SECONDS_PATTERN = re.compile(r"Elapsed seconds:\s*([0-9.]+)\s*s")
-AUDIO_DURATION_PATTERN = re.compile(r"Audio duration:\s*([0-9.]+)\s*s")
-RTF_PATTERN = re.compile(r"Real[- ]time factor(?: \(RTF\))?:.*?=\s*([0-9.]+)")
+ELAPSED_SECONDS_PATTERN = re.compile(r"Elapsed seconds:\s*([0-9.]+)")
+AUDIO_DURATION_PATTERN = re.compile(r"Audio duration(?:\s*\(s\))?:\s*([0-9.]+)")
+RTF_PATTERN = re.compile(r"Real[- ]time factor.*=\s*([0-9.]+)")
 TEXT_PATTERN = re.compile(r"The text is:\s*(.+?)\.\s*Speaker ID:")
+MELO_ENCODER_PATTERN = re.compile(r"encoder run take\s*([0-9.]+)\s*ms", re.IGNORECASE)
+MELO_DECODER_PATTERN = re.compile(r"decoder run take\s*([0-9.]+)\s*ms", re.IGNORECASE)
+MELO_MODEL_LOAD_PATTERN = re.compile(r"load models take\s*([0-9.]+)\s*ms", re.IGNORECASE)
 CORE_LOAD_PATTERN = re.compile(r"Core([012]):\s*([0-9]+)%")
 RKNN_VERSION_PATTERN = re.compile(r"librknnrt version:\s*(.+)")
 MEMORY_TOTAL_PATTERN = re.compile(r"内存：\s*([0-9.]+)([GMK]i)\b")
@@ -278,6 +282,8 @@ def file_size_bytes(path: Path) -> int | None:
 
 def detect_tts_backend(run_tts_script: str) -> str:
     script_lower = run_tts_script.lower()
+    if "decoder.rknn" in script_lower or "melotts_rknn" in script_lower:
+        return "melotts-rknn"
     if ".rknn" in script_lower or "provider=rknn" in script_lower:
         return "rknn"
     if "onnx" in script_lower or "sherpa-onnx-offline-tts" in script_lower:
@@ -310,39 +316,69 @@ def maybe_read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def inspect_runtime(runtime_dir: Path) -> dict[str, Any]:
-    run_tts_path = runtime_dir / "run_tts.sh"
-    run_asr_path = runtime_dir / "run_asr.sh"
+def inspect_tts_runtime(tts_runtime_dir: Path) -> dict[str, Any]:
+    run_tts_path = tts_runtime_dir / "run_tts.sh"
     run_tts_script = maybe_read_text(run_tts_path)
-    run_asr_script = maybe_read_text(run_asr_path)
 
-    tts_model_path = runtime_dir / "models" / "tts" / "vits-icefall-zh-aishell3" / "model.onnx"
-    asr_cpu_model_path = runtime_dir / "models" / "asr" / "cpu" / "sense-voice" / "model.int8.onnx"
-    asr_rknn_model_path = runtime_dir / "models" / "asr" / "rknn" / "sense-voice-rk3588-20s" / "model.rknn"
-    asr_streaming_model_dir = runtime_dir / "models" / "asr" / "streaming" / "streaming-zipformer-multi-zh-hans"
-    asr_streaming_encoder_path = asr_streaming_model_dir / "encoder-epoch-20-avg-1-chunk-16-left-128.int8.onnx"
+    decoder_rknn_path = tts_runtime_dir / "decoder.rknn"
+    encoder_onnx_path = tts_runtime_dir / "encoder.onnx"
+
+    decoder_size = file_size_bytes(decoder_rknn_path)
+    encoder_size = file_size_bytes(encoder_onnx_path)
+    total_size = (decoder_size or 0) + (encoder_size or 0)
 
     return {
-        "runtime_dir": str(runtime_dir),
+        "tts_runtime_dir": str(tts_runtime_dir),
         "tts_backend": detect_tts_backend(run_tts_script),
-        "tts_supports_rknn": ".rknn" in run_tts_script.lower() or "provider=rknn" in run_tts_script.lower(),
+        "tts_supports_rknn": decoder_rknn_path.exists(),
+        "tts_model_name": "MeloTTS-RKNN2" if decoder_rknn_path.exists() else "",
+        "tts_model_size_mib": bytes_to_mib(total_size) if total_size > 0 else None,
+        "tts_model_is_int8": False,
+        "tts_decoder_rknn_size_mib": bytes_to_mib(decoder_size),
+        "tts_encoder_onnx_size_mib": bytes_to_mib(encoder_size),
+    }
+
+
+def inspect_runtime(runtime_dir: Path, tts_runtime_dir: Path | None = None) -> dict[str, Any]:
+    run_asr_path = runtime_dir / "run_asr.sh"
+    run_asr_script = maybe_read_text(run_asr_path)
+
+    asr_streaming_rknn_model_dir = runtime_dir / "models" / "asr" / "streaming-rknn" / "streaming-zipformer-rk3588-small"
+    asr_streaming_rknn_encoder_path = asr_streaming_rknn_model_dir / "encoder.rknn"
+
+    tts_info: dict[str, Any]
+    if tts_runtime_dir and tts_runtime_dir.exists():
+        tts_info = inspect_tts_runtime(tts_runtime_dir)
+    else:
+        tts_info = {
+            "tts_runtime_dir": "",
+            "tts_backend": "unknown",
+            "tts_supports_rknn": False,
+            "tts_model_name": "",
+            "tts_model_size_mib": None,
+            "tts_model_is_int8": False,
+            "tts_decoder_rknn_size_mib": None,
+            "tts_encoder_onnx_size_mib": None,
+        }
+
+    asr_models_size = sum(filter(None, [
+        directory_size_bytes(asr_streaming_rknn_model_dir) if asr_streaming_rknn_model_dir.exists() else 0,
+    ]))
+    tts_model_bytes = int((tts_info.get("tts_model_size_mib") or 0) * 1024 * 1024)
+    models_total = asr_models_size + tts_model_bytes
+
+    result = {
+        "runtime_dir": str(runtime_dir),
         "asr_mode": detect_asr_mode(run_asr_script),
         "asr_supports_rknn": "provider=rknn" in run_asr_script.lower(),
-        "asr_streaming_available": asr_streaming_encoder_path.exists(),
-        "tts_model_is_int8": "int8" in tts_model_path.name.lower(),
-        "asr_cpu_model_is_int8": "int8" in asr_cpu_model_path.name.lower(),
-        "asr_streaming_model_is_int8": "int8" in asr_streaming_encoder_path.name.lower(),
-        "tts_model_size_mib": bytes_to_mib(file_size_bytes(tts_model_path)),
-        "asr_cpu_model_size_mib": bytes_to_mib(file_size_bytes(asr_cpu_model_path)),
-        "asr_rknn_model_size_mib": bytes_to_mib(file_size_bytes(asr_rknn_model_path)),
-        "asr_streaming_model_size_mib": bytes_to_mib(directory_size_bytes(asr_streaming_model_dir)) if asr_streaming_model_dir.exists() else None,
-        "models_total_size_mib": bytes_to_mib(directory_size_bytes(runtime_dir / "models")),
+        "asr_streaming_rknn_available": asr_streaming_rknn_encoder_path.exists(),
+        "asr_streaming_rknn_model_size_mib": bytes_to_mib(directory_size_bytes(asr_streaming_rknn_model_dir)) if asr_streaming_rknn_model_dir.exists() else None,
+        "asr_streaming_rknn_model_name": asr_streaming_rknn_model_dir.name if asr_streaming_rknn_model_dir.exists() else "",
+        "models_total_size_mib": bytes_to_mib(models_total) if models_total > 0 else None,
         "offline_ready": (runtime_dir / "bin").exists() and (runtime_dir / "models").exists(),
-        "tts_model_name": tts_model_path.parent.name if tts_model_path.parent.exists() else "",
-        "asr_cpu_model_name": asr_cpu_model_path.parent.name if asr_cpu_model_path.parent.exists() else "",
-        "asr_rknn_model_name": asr_rknn_model_path.parent.name if asr_rknn_model_path.parent.exists() else "",
-        "asr_streaming_model_name": asr_streaming_model_dir.name if asr_streaming_model_dir.exists() else "",
     }
+    result.update(tts_info)
+    return result
 
 
 def pick_first_existing(paths: Sequence[Path]) -> Path | None:
@@ -364,10 +400,10 @@ def parse_smoke_log(path: Path | None) -> dict[str, Any]:
         return {}
 
     sections: dict[str, dict[str, Any]] = {
-        "tts": {"label": "CPU TTS smoke"},
-        "asr_streaming": {"label": "Streaming ASR smoke"},
-        "asr_cpu": {"label": "CPU ASR smoke"},
-        "asr_rknn": {"label": "RKNN ASR smoke"},
+        "tts_cold_start": {"label": "TTS cold start"},
+        "tts_warm_run": {"label": "TTS warm run"},
+        "tts_profile_run": {"label": "TTS profile run"},
+        "asr_streaming_rknn": {"label": "Streaming ASR (RKNN) smoke"},
     }
     current_section: str | None = None
 
@@ -377,17 +413,21 @@ def parse_smoke_log(path: Path | None) -> dict[str, Any]:
         line = raw_line.strip()
         header_match = section_pattern.match(line)
         if header_match:
-            header = header_match.group(1).lower()
+            header_text = header_match.group(1).strip()
+            header = header_text.lower()
             if "tts" in header:
-                current_section = "tts"
-            elif "streaming" in header:
-                current_section = "asr_streaming"
-            elif "rknn" in header:
-                current_section = "asr_rknn"
-            elif "asr" in header:
-                current_section = "asr_cpu"
+                if "profile" in header:
+                    current_section = "tts_profile_run"
+                elif "warm" in header:
+                    current_section = "tts_warm_run"
+                else:
+                    current_section = "tts_cold_start"
+            elif "streaming" in header or "asr" in header:
+                current_section = "asr_streaming_rknn"
             else:
                 current_section = None
+            if current_section is not None:
+                sections[current_section]["label"] = header_text
             continue
         if current_section is None:
             continue
@@ -395,25 +435,63 @@ def parse_smoke_log(path: Path | None) -> dict[str, Any]:
         section = sections[current_section]
         elapsed_match = ELAPSED_SECONDS_PATTERN.search(line)
         if elapsed_match:
-            section["elapsed_seconds"] = float(elapsed_match.group(1))
-            continue
+            section.setdefault("_elapsed_list", [])
+            section["_elapsed_list"].append(float(elapsed_match.group(1)))
         audio_match = AUDIO_DURATION_PATTERN.search(line)
         if audio_match:
-            section["audio_duration_seconds"] = float(audio_match.group(1))
-            continue
+            section.setdefault("_audio_dur_list", [])
+            section["_audio_dur_list"].append(float(audio_match.group(1)))
         rtf_match = RTF_PATTERN.search(line)
         if rtf_match:
-            section["rtf"] = float(rtf_match.group(1))
-            continue
+            section.setdefault("_rtf_list", [])
+            section["_rtf_list"].append(float(rtf_match.group(1)))
         text_match = TEXT_PATTERN.search(line)
         if text_match:
             section["text"] = text_match.group(1).strip()
-            continue
+        encoder_match = MELO_ENCODER_PATTERN.search(line)
+        if encoder_match:
+            section.setdefault("_encoder_ms", 0.0)
+            section["_encoder_ms"] = float(encoder_match.group(1))
+        decoder_match = MELO_DECODER_PATTERN.search(line)
+        if decoder_match:
+            section.setdefault("_decoder_ms_list", [])
+            section["_decoder_ms_list"].append(float(decoder_match.group(1)))
+        model_load_match = MELO_MODEL_LOAD_PATTERN.search(line)
+        if model_load_match:
+            section["model_load_ms"] = float(model_load_match.group(1))
         if line.startswith("{") and line.endswith("}"):
             try:
                 section["result"] = json.loads(line)
             except json.JSONDecodeError:
                 pass
+
+    # Aggregate multi-sample metrics per section.
+    for section in sections.values():
+        elapsed_list = section.pop("_elapsed_list", None)
+        audio_dur_list = section.pop("_audio_dur_list", None)
+        rtf_list = section.pop("_rtf_list", None)
+        encoder_ms = section.pop("_encoder_ms", None)
+        decoder_ms_list = section.pop("_decoder_ms_list", None)
+
+        if elapsed_list:
+            section["elapsed_seconds"] = round(sum(elapsed_list) / len(elapsed_list), 3)
+            section["elapsed_seconds_samples"] = elapsed_list
+        if audio_dur_list:
+            section["audio_duration_seconds"] = round(sum(audio_dur_list) / len(audio_dur_list), 3)
+        if rtf_list:
+            section["rtf"] = round(sum(rtf_list) / len(rtf_list), 3)
+        if encoder_ms is not None:
+            section["encoder_elapsed_ms"] = round(float(encoder_ms), 3)
+        if decoder_ms_list:
+            section["decoder_elapsed_ms"] = round(sum(decoder_ms_list), 3)
+            section["decoder_run_count"] = len(decoder_ms_list)
+        # Synthesise elapsed_seconds from MeloTTS step timings when no explicit summary is available.
+        if "elapsed_seconds" not in section and decoder_ms_list:
+            total_ms = (encoder_ms or 0.0) + sum(decoder_ms_list)
+            section["elapsed_seconds"] = round(total_ms / 1000.0, 3)
+            section["elapsed_seconds_source"] = "step_sum"
+        if section.get("elapsed_seconds") is not None:
+            section["elapsed_ms"] = round(float(section["elapsed_seconds"]) * 1000.0, 3)
 
     return sections
 
@@ -1003,15 +1081,14 @@ def copy_asset(source: Path | None, assets_dir: Path) -> str | None:
 
 def evaluate_requirement(text: str, subsection: str, observed: dict[str, Any]) -> dict[str, str]:
     tts_elapsed_ms = observed.get("tts_elapsed_ms")
+    tts_elapsed_basis = observed.get("tts_elapsed_basis") or "unknown"
     tts_backend = observed.get("tts_backend", "unknown")
-    asr_rknn_elapsed_ms = observed.get("asr_rknn_elapsed_ms")
-    asr_streaming_elapsed_ms = observed.get("asr_streaming_elapsed_ms")
+    asr_streaming_rknn_elapsed_ms = observed.get("asr_streaming_rknn_elapsed_ms")
     asr_mode = observed.get("asr_mode", "unknown")
     tts_max_rss_mib = observed.get("tts_max_rss_mib")
     tts_model_size_mib = observed.get("tts_model_size_mib")
     tts_model_is_int8 = bool(observed.get("tts_model_is_int8"))
-    asr_cpu_model_size_mib = observed.get("asr_cpu_model_size_mib")
-    asr_streaming_model_size_mib = observed.get("asr_streaming_model_size_mib")
+    asr_streaming_rknn_model_size_mib = observed.get("asr_streaming_rknn_model_size_mib")
     models_total_size_mib = observed.get("models_total_size_mib")
     npu_peak_percent = observed.get("npu_peak_percent") or 0
     rknn_profile_source = observed.get("rknn_profile_source")
@@ -1019,19 +1096,25 @@ def evaluate_requirement(text: str, subsection: str, observed: dict[str, Any]) -
     rknn_runtime_layer_log_count = observed.get("rknn_runtime_layer_log_count") or 0
     offline_ready = bool(observed.get("offline_ready"))
     tts_model_name = observed.get("tts_model_name", "")
+    tts_basis_label = {
+        "cold_start": "cold start",
+        "warm_run": "warm run",
+        "profile_run": "profile run",
+        "unknown": "TTS run",
+    }.get(tts_elapsed_basis, str(tts_elapsed_basis))
 
     if "语音合成端到端延迟" in text:
         if tts_elapsed_ms is None:
-            return {"status": "unknown", "observed": "缺少 TTS 冒烟或 profile 时延数据", "rationale": "当前报告没有可用的 TTS 延迟样本。"}
+            return {"status": "unknown", "observed": "缺少可用的 TTS cold/warm/profile 时延数据", "rationale": "当前报告没有可用于判定的 TTS 延迟样本。"}
         if tts_backend != "rknn":
             return {
                 "status": "fail",
-                "observed": f"当前 TTS 后端为 {tts_backend}，单句 {tts_elapsed_ms:.0f} ms",
+                "observed": f"当前 TTS 后端为 {tts_backend}，{tts_basis_label} {tts_elapsed_ms:.0f} ms",
                 "rationale": "指标明确要求 NPU 加速下 ≤ 150 ms，而当前交付主线仍是 CPU/ONNX TTS。",
             }
         if tts_elapsed_ms <= 150.0:
-            return {"status": "pass", "observed": f"{tts_elapsed_ms:.0f} ms", "rationale": "已满足 150 ms 目标。"}
-        return {"status": "fail", "observed": f"{tts_elapsed_ms:.0f} ms", "rationale": "虽为 NPU 路径，但仍超过 150 ms。"}
+            return {"status": "pass", "observed": f"{tts_basis_label} {tts_elapsed_ms:.0f} ms", "rationale": "已满足 150 ms 目标。"}
+        return {"status": "fail", "observed": f"{tts_basis_label} {tts_elapsed_ms:.0f} ms", "rationale": "虽为 NPU 路径，但仍超过 150 ms。"}
 
     if "普通话合成准确率" in text:
         return {"status": "unknown", "observed": "缺少带标注的 TTS 准确率测试集", "rationale": "当前报告只汇总冒烟和计划信息，没有自动化音素或文本对齐评分。"}
@@ -1073,31 +1156,21 @@ def evaluate_requirement(text: str, subsection: str, observed: dict[str, Any]) -
         return {"status": "unknown", "observed": "缺少完整运行包证据", "rationale": "当前报告无法确认离线运行条件是否完整。"}
 
     if subsection == "2.1 端侧识别延迟" and "≤ 200 ms" in text:
-        if asr_mode == "streaming":
-            asr_latency_ms = asr_streaming_elapsed_ms
-            if asr_latency_ms is None:
-                return {"status": "unknown", "observed": "缺少流式 ASR 时延样本", "rationale": "未找到可用于 200 ms 判定的流式 ASR 冒烟证据。"}
-            if asr_latency_ms <= 200.0:
-                return {"status": "pass", "observed": f"流式 ASR 冒烟 {asr_latency_ms:.0f} ms", "rationale": "流式 ASR 延迟满足目标。"}
-            return {"status": "fail", "observed": f"流式 ASR 冒烟 {asr_latency_ms:.0f} ms", "rationale": "流式 ASR 延迟超过目标。"}
-        observed_text = "当前 ASR 入口为 offline"
-        if asr_rknn_elapsed_ms is not None:
-            observed_text += f"，RKNN 样本 {asr_rknn_elapsed_ms:.0f} ms"
-        return {"status": "fail", "observed": observed_text, "rationale": "指标要求流式识别，而当前 run_asr.sh 和实测证据均为离线识别链路。"}
+        if asr_streaming_rknn_elapsed_ms is None:
+            return {"status": "unknown", "observed": "缺少流式 ASR (RKNN) 时延样本", "rationale": "未找到可用于 200 ms 判定的流式 ASR 冒烟证据。"}
+        if asr_streaming_rknn_elapsed_ms <= 200.0:
+            return {"status": "pass", "observed": f"流式 ASR (RKNN) 冒烟 {asr_streaming_rknn_elapsed_ms:.0f} ms", "rationale": "流式 ASR 延迟满足目标。"}
+        return {"status": "fail", "observed": f"流式 ASR (RKNN) 冒烟 {asr_streaming_rknn_elapsed_ms:.0f} ms", "rationale": "流式 ASR 延迟超过目标。"}
 
     if subsection == "2.2 识别准确率":
         return {"status": "unknown", "observed": "缺少带标注的 ASR 评测集", "rationale": "当前报告仅汇总冒烟转写样例，不包含准确率统计。"}
 
     if subsection == "2.3 模型与稳定性" and "模型体积 ≤ 100 MB" in text:
-        if asr_mode == "streaming" and asr_streaming_model_size_mib is not None:
-            if asr_streaming_model_size_mib <= 100.0:
-                return {"status": "pass", "observed": f"流式模型 INT8 合计 {asr_streaming_model_size_mib:.1f} MiB", "rationale": "当前默认流式 ASR 模型体积符合 100 MiB 目标。"}
-            return {"status": "fail", "observed": f"流式模型 INT8 合计 {asr_streaming_model_size_mib:.1f} MiB", "rationale": "当前流式 ASR 模型体积超过 100 MiB。"}
-        if asr_cpu_model_size_mib is None:
+        if asr_streaming_rknn_model_size_mib is None:
             return {"status": "unknown", "observed": "缺少 ASR 模型文件", "rationale": "无法计算当前 ASR 模型体积。"}
-        if asr_cpu_model_size_mib <= 100.0:
-            return {"status": "pass", "observed": f"CPU INT8 模型 {asr_cpu_model_size_mib:.1f} MiB", "rationale": "当前 CPU ASR 模型文件名和体积均符合 INT8 方向。"}
-        return {"status": "fail", "observed": f"CPU INT8 模型 {asr_cpu_model_size_mib:.1f} MiB", "rationale": "当前 ASR 模型体积超过 100 MiB。"}
+        if asr_streaming_rknn_model_size_mib <= 100.0:
+            return {"status": "pass", "observed": f"流式 RKNN 模型合计 {asr_streaming_rknn_model_size_mib:.1f} MiB", "rationale": "当前流式 RKNN ASR 模型体积符合 100 MiB 目标。"}
+        return {"status": "fail", "observed": f"流式 RKNN 模型合计 {asr_streaming_rknn_model_size_mib:.1f} MiB", "rationale": "当前流式 RKNN ASR 模型体积超过 100 MiB。"}
 
     if subsection == "2.3 模型与稳定性" and "支持流式识别" in text:
         if asr_mode == "streaming":
@@ -1113,12 +1186,12 @@ def evaluate_requirement(text: str, subsection: str, observed: dict[str, Any]) -
         return {"status": "unknown", "observed": "缺少完整 ASR 运行包证据", "rationale": "无法确认离线运行条件。"}
 
     if "全链路闭环延迟" in text:
-        if tts_elapsed_ms is not None and asr_rknn_elapsed_ms is not None:
-            combined_ms = tts_elapsed_ms + asr_rknn_elapsed_ms
+        if tts_elapsed_ms is not None and asr_streaming_rknn_elapsed_ms is not None:
+            combined_ms = tts_elapsed_ms + asr_streaming_rknn_elapsed_ms
             status = "pass" if combined_ms <= 350.0 else "fail"
             return {
                 "status": status,
-                "observed": f"TTS {tts_elapsed_ms:.0f} ms + ASR RKNN {asr_rknn_elapsed_ms:.0f} ms = {combined_ms:.0f} ms",
+                "observed": f"TTS {tts_basis_label} {tts_elapsed_ms:.0f} ms + ASR 流式 RKNN {asr_streaming_rknn_elapsed_ms:.0f} ms = {combined_ms:.0f} ms",
                 "rationale": "这里按现有冒烟样本做保守相加，且尚未包含真实闭环编解码开销。",
             }
         return {"status": "unknown", "observed": "缺少 TTS 或 ASR 延迟样本", "rationale": "当前报告无法对闭环延迟做完整判断。"}
@@ -1278,7 +1351,9 @@ def write_svg_asset(path: Path, markup: str) -> str | None:
     return relative_posix(path, path.parent.parent)
 
 
-def collect_evidence(evidence_dir: Path, assets_dir: Path) -> dict[str, Any]:
+def collect_evidence(evidence_dir: Path, assets_dir: Path, *, tts_evidence_dir: Path | None = None) -> dict[str, Any]:
+    tts_ev_dir = tts_evidence_dir if tts_evidence_dir and tts_evidence_dir.is_dir() else None
+
     smoke_log_path = pick_first_existing([
         evidence_dir / "smoke_test_summary.log",
         evidence_dir / "smoke_test.log",
@@ -1307,10 +1382,6 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path) -> dict[str, Any]:
         evidence_dir / "rknn_runtime.log",
         evidence_dir / "rknn_layer_runtime.log",
     ]) or first_glob(evidence_dir, "*rknn*runtime*.log")
-    tts_profile_csv_path = pick_first_existing([
-        evidence_dir / "profile-samples.csv",
-        evidence_dir / "tts-profile-samples.csv",
-    ]) or first_glob(evidence_dir, "*profile*samples*.csv")
     tts_profile_log_path = pick_first_existing([
         evidence_dir / "profile.log",
         evidence_dir / "tts-profile.log",
@@ -1321,14 +1392,40 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path) -> dict[str, Any]:
         evidence_dir / "smoke_test.wav",
     ]) or first_glob(evidence_dir, "*.wav")
 
+    # ----- TTS evidence from separate directory -----
+    tts_smoke_log_path: Path | None = None
+    if tts_ev_dir:
+        tts_smoke_log_path = pick_first_existing([
+            tts_ev_dir / "smoke_test_summary.log",
+            tts_ev_dir / "smoke_test.log",
+        ])
+        if tts_profile_log_path is None:
+            tts_profile_log_path = pick_first_existing([
+                tts_ev_dir / "profile.log",
+                tts_ev_dir / "tts-profile.log",
+            ])
+        if audio_path is None:
+            audio_path = pick_first_existing([
+                tts_ev_dir / "profile_tts.wav",
+                tts_ev_dir / "smoke_test_tts.wav",
+                tts_ev_dir / "profile.wav",
+            ]) or first_glob(tts_ev_dir, "*.wav")
+
     smoke_summary = parse_smoke_log(smoke_log_path)
+
+    # Merge TTS sections from the dedicated TTS smoke log if available.
+    if tts_smoke_log_path and tts_smoke_log_path != smoke_log_path:
+        tts_smoke_sections = parse_smoke_log(tts_smoke_log_path)
+        for section_name in ("tts_cold_start", "tts_warm_run", "tts_profile_run"):
+            tts_section = tts_smoke_sections.get(section_name, {})
+            if len(tts_section) > 1:
+                smoke_summary[section_name] = tts_section
     board_capabilities = parse_board_capabilities(board_capabilities_path)
     rknpu_load = parse_rknn_profile_log(rknpu_load_path)
     rknn_perf = parse_rknn_perf_text(rknn_perf_path)
     rknn_perf_run = parse_rknn_perf_run(rknn_perf_run_path)
     rknn_memory = parse_rknn_memory_profile(rknn_memory_path)
     rknn_runtime_log = parse_rknn_runtime_log(rknn_runtime_log_path)
-    tts_profile = parse_tts_profile_csv(tts_profile_csv_path)
     wav_metadata = read_wav_metadata(audio_path)
 
     copied_assets = {
@@ -1339,7 +1436,6 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path) -> dict[str, Any]:
         "rknn_perf_run": copy_asset(rknn_perf_run_path, assets_dir),
         "rknn_memory_profile": copy_asset(rknn_memory_path, assets_dir),
         "rknn_runtime_log": copy_asset(rknn_runtime_log_path, assets_dir),
-        "tts_profile_csv": copy_asset(tts_profile_csv_path, assets_dir),
         "tts_profile_log": copy_asset(tts_profile_log_path, assets_dir),
         "audio": copy_asset(audio_path, assets_dir),
     }
@@ -1355,39 +1451,7 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path) -> dict[str, Any]:
         ),
         max_value=100.0,
     )
-    tts_heatmap_markup = render_heatmap_svg(
-        title="TTS Process Sampling Heatmap",
-        subtitle="由 profile-samples.csv 采样的 RSS / CPU / NPU 指标生成。",
-        samples=[
-            {
-                "rss": sample["rss_kb"] / 1024.0,
-                "cpu_user": sample["utime_ticks"],
-                "npu_peak": max(sample["npu_core0_percent"], sample["npu_core1_percent"], sample["npu_core2_percent"]),
-            }
-            for sample in tts_profile.get("samples", [])
-        ],
-        rows=(
-            ("RSS MiB", "rss"),
-            ("User CPU Ticks", "cpu_user"),
-            ("NPU Peak %", "npu_peak"),
-        ),
-        max_value=max(
-            [
-                max((sample["rss_kb"] / 1024.0 for sample in tts_profile.get("samples", [])), default=0.0),
-                max((sample["utime_ticks"] for sample in tts_profile.get("samples", [])), default=0.0),
-                max(
-                    (
-                        max(sample["npu_core0_percent"], sample["npu_core1_percent"], sample["npu_core2_percent"])
-                        for sample in tts_profile.get("samples", [])
-                    ),
-                    default=0.0,
-                ),
-            ]
-        ),
-    )
-
     copied_assets["asr_rknpu_load_heatmap"] = write_svg_asset(assets_dir / "asr-rknpu-load-heatmap.svg", asr_heatmap_markup)
-    copied_assets["tts_profile_heatmap"] = write_svg_asset(assets_dir / "tts-profile-heatmap.svg", tts_heatmap_markup)
 
     return {
         "evidence_dir": str(evidence_dir),
@@ -1398,7 +1462,6 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path) -> dict[str, Any]:
         "rknn_perf_run": rknn_perf_run,
         "rknn_memory": rknn_memory,
         "rknn_runtime_log": rknn_runtime_log,
-        "tts_profile": tts_profile,
         "audio": wav_metadata,
         "assets": copied_assets,
     }
@@ -1406,10 +1469,10 @@ def collect_evidence(evidence_dir: Path, assets_dir: Path) -> dict[str, Any]:
 
 def build_observed_metrics(runtime_info: dict[str, Any], evidence: dict[str, Any], plan_summary: dict[str, Any]) -> dict[str, Any]:
     smoke = evidence.get("smoke", {})
-    tts_smoke = smoke.get("tts", {})
-    asr_streaming = smoke.get("asr_streaming", {})
-    asr_rknn = smoke.get("asr_rknn", {})
-    tts_profile = evidence.get("tts_profile", {})
+    tts_cold_start = smoke.get("tts_cold_start", {})
+    tts_warm_run = smoke.get("tts_warm_run", {})
+    tts_profile_run = smoke.get("tts_profile_run", {})
+    asr_streaming_rknn = smoke.get("asr_streaming_rknn", {})
     rknpu_load = evidence.get("rknpu_load", {})
     rknn_perf = evidence.get("rknn_perf", {})
     rknn_perf_run = evidence.get("rknn_perf_run", {})
@@ -1423,18 +1486,58 @@ def build_observed_metrics(runtime_info: dict[str, Any], evidence: dict[str, Any
         rknn_profile_source = "load_sampling"
 
     category_counts = plan_summary.get("category_counts", {})
+
+    tts_primary_run = tts_warm_run
+    tts_elapsed_basis = "warm_run"
+    if tts_primary_run.get("elapsed_seconds") is None:
+        tts_primary_run = tts_cold_start
+        tts_elapsed_basis = "cold_start"
+    if tts_primary_run.get("elapsed_seconds") is None:
+        tts_primary_run = tts_profile_run
+        tts_elapsed_basis = "profile_run"
+
+    # TTS elapsed: prefer warm run, then cold start, then profile run.
+    tts_elapsed_ms: float | None = None
+    if tts_primary_run.get("elapsed_seconds") is not None:
+        tts_elapsed_ms = (tts_primary_run["elapsed_seconds"] or 0) * 1000.0
+    else:
+        tts_elapsed_basis = ""
+
+    # TTS audio duration: prefer the selected run, fall back to wav metadata.
+    tts_audio_duration_s: float | None = tts_primary_run.get("audio_duration_seconds")
+    if tts_audio_duration_s is None:
+        wav_meta = evidence.get("audio", {})
+        if wav_meta.get("duration_s"):
+            tts_audio_duration_s = wav_meta["duration_s"]
+
+    # TTS RTF: prefer the selected run, compute from elapsed / audio when both present.
+    tts_rtf: float | None = tts_primary_run.get("rtf")
+    if tts_rtf is None and tts_elapsed_ms is not None and tts_audio_duration_s and tts_audio_duration_s > 0:
+        tts_rtf = round(tts_elapsed_ms / 1000.0 / tts_audio_duration_s, 3)
+
     return {
         "tts_backend": runtime_info.get("tts_backend"),
         "asr_mode": runtime_info.get("asr_mode"),
-        "tts_elapsed_ms": (tts_smoke.get("elapsed_seconds") or 0) * 1000.0 if tts_smoke.get("elapsed_seconds") is not None else None,
-        "tts_audio_duration_s": tts_smoke.get("audio_duration_seconds"),
-        "tts_rtf": tts_smoke.get("rtf"),
-        "asr_streaming_elapsed_ms": (asr_streaming.get("elapsed_seconds") or 0) * 1000.0 if asr_streaming.get("elapsed_seconds") is not None else None,
-        "asr_streaming_rtf": asr_streaming.get("rtf"),
-        "asr_rknn_elapsed_ms": (asr_rknn.get("elapsed_seconds") or 0) * 1000.0 if asr_rknn.get("elapsed_seconds") is not None else None,
-        "asr_rknn_rtf": asr_rknn.get("rtf"),
-        "tts_max_rss_mib": tts_profile.get("max_rss_mib"),
-        "npu_peak_percent": max(rknpu_load.get("peak_percent", 0), tts_profile.get("peak_npu_percent", 0)),
+        "tts_elapsed_basis": tts_elapsed_basis,
+        "tts_elapsed_ms": tts_elapsed_ms,
+        "tts_audio_duration_s": tts_audio_duration_s,
+        "tts_rtf": tts_rtf,
+        "tts_cold_start_elapsed_ms": tts_cold_start.get("elapsed_ms"),
+        "tts_cold_start_model_load_ms": tts_cold_start.get("model_load_ms"),
+        "tts_cold_start_encoder_ms": tts_cold_start.get("encoder_elapsed_ms"),
+        "tts_cold_start_decoder_ms": tts_cold_start.get("decoder_elapsed_ms"),
+        "tts_warm_run_elapsed_ms": tts_warm_run.get("elapsed_ms"),
+        "tts_warm_run_model_load_ms": tts_warm_run.get("model_load_ms"),
+        "tts_warm_run_encoder_ms": tts_warm_run.get("encoder_elapsed_ms"),
+        "tts_warm_run_decoder_ms": tts_warm_run.get("decoder_elapsed_ms"),
+        "tts_profile_run_elapsed_ms": tts_profile_run.get("elapsed_ms"),
+        "tts_profile_run_model_load_ms": tts_profile_run.get("model_load_ms"),
+        "tts_profile_run_encoder_ms": tts_profile_run.get("encoder_elapsed_ms"),
+        "tts_profile_run_decoder_ms": tts_profile_run.get("decoder_elapsed_ms"),
+        "asr_streaming_rknn_elapsed_ms": (asr_streaming_rknn.get("elapsed_seconds") or 0) * 1000.0 if asr_streaming_rknn.get("elapsed_seconds") is not None else None,
+        "asr_streaming_rknn_rtf": asr_streaming_rknn.get("rtf"),
+        "tts_max_rss_mib": None,
+        "npu_peak_percent": rknpu_load.get("peak_percent", 0),
         "rknn_profile_source": rknn_profile_source,
         "rknn_operator_count": rknn_perf.get("operator_count"),
         "rknn_total_time_ms": (rknn_perf.get("summary", {}).get("total_operator_elapsed_time_us") or 0.0) / 1000.0 if rknn_perf.get("summary", {}).get("total_operator_elapsed_time_us") is not None else None,
@@ -1445,10 +1548,9 @@ def build_observed_metrics(runtime_info: dict[str, Any], evidence: dict[str, Any
         "tts_model_size_mib": runtime_info.get("tts_model_size_mib"),
         "tts_model_is_int8": runtime_info.get("tts_model_is_int8"),
         "tts_model_name": runtime_info.get("tts_model_name"),
-        "asr_cpu_model_size_mib": runtime_info.get("asr_cpu_model_size_mib"),
-        "asr_streaming_model_size_mib": runtime_info.get("asr_streaming_model_size_mib"),
-        "asr_streaming_available": runtime_info.get("asr_streaming_available"),
-        "asr_streaming_model_name": runtime_info.get("asr_streaming_model_name"),
+        "asr_streaming_rknn_available": runtime_info.get("asr_streaming_rknn_available"),
+        "asr_streaming_rknn_model_size_mib": runtime_info.get("asr_streaming_rknn_model_size_mib"),
+        "asr_streaming_rknn_model_name": runtime_info.get("asr_streaming_rknn_model_name"),
         "models_total_size_mib": runtime_info.get("models_total_size_mib"),
         "offline_ready": runtime_info.get("offline_ready"),
         "plan_domain_case_count": category_counts.get("domain", 0),
@@ -1481,6 +1583,7 @@ def build_report(
     workspace_root: Path = WORKSPACE_ROOT,
     output_root: Path | None = None,
     runtime_dir: Path | None = None,
+    tts_runtime_dir: Path | None = None,
     evidence_dir: Path | None = None,
     requirements_path: Path | None = None,
     plan_path: Path | None = None,
@@ -1492,7 +1595,9 @@ def build_report(
     resolved_output_root.mkdir(parents=True, exist_ok=True)
 
     resolved_runtime_dir = (runtime_dir or (workspace_root / DEFAULT_RUNTIME_DIR.relative_to(WORKSPACE_ROOT))).resolve()
+    resolved_tts_runtime_dir = (tts_runtime_dir or (workspace_root / DEFAULT_TTS_RUNTIME_DIR.relative_to(WORKSPACE_ROOT))).resolve()
     resolved_evidence_dir = (evidence_dir or (resolved_runtime_dir / "output")).resolve()
+    resolved_tts_evidence_dir = (resolved_tts_runtime_dir / "output").resolve()
     resolved_requirements_path = (requirements_path or (workspace_root / DEFAULT_REQUIREMENTS_PATH.relative_to(WORKSPACE_ROOT))).resolve()
     resolved_plan_path = resolve_plan_path(workspace_root, plan_path.resolve() if plan_path is not None else None)
 
@@ -1513,8 +1618,8 @@ def build_report(
     else:
         unittest_output_asset = None
 
-    runtime_info = inspect_runtime(resolved_runtime_dir)
-    evidence = collect_evidence(resolved_evidence_dir, assets_dir)
+    runtime_info = inspect_runtime(resolved_runtime_dir, resolved_tts_runtime_dir)
+    evidence = collect_evidence(resolved_evidence_dir, assets_dir, tts_evidence_dir=resolved_tts_evidence_dir)
     if unittest_output_asset is not None:
         evidence["assets"]["unittest_output"] = unittest_output_asset
 
@@ -1584,7 +1689,8 @@ def build_report(
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate an integrated RKVoice HTML/JSON test report")
     parser.add_argument("--output-root", default="", help="Report output root directory")
-    parser.add_argument("--runtime-dir", default="", help="Runtime bundle directory used for evidence discovery")
+    parser.add_argument("--runtime-dir", default="", help="ASR runtime bundle directory used for evidence discovery")
+    parser.add_argument("--tts-runtime-dir", default="", help="TTS (MeloTTS-RKNN2) runtime bundle directory")
     parser.add_argument("--evidence-dir", default="", help="Explicit evidence directory, defaults to <runtime-dir>/output")
     parser.add_argument("--requirements", default="", help="Requirements markdown path")
     parser.add_argument("--plan", default="", help="TTS test plan JSON path")
@@ -1600,6 +1706,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = build_report(
             output_root=Path(args.output_root).resolve() if args.output_root else None,
             runtime_dir=Path(args.runtime_dir).resolve() if args.runtime_dir else None,
+            tts_runtime_dir=Path(args.tts_runtime_dir).resolve() if args.tts_runtime_dir else None,
             evidence_dir=Path(args.evidence_dir).resolve() if args.evidence_dir else None,
             requirements_path=Path(args.requirements).resolve() if args.requirements else None,
             plan_path=Path(args.plan).resolve() if args.plan else None,

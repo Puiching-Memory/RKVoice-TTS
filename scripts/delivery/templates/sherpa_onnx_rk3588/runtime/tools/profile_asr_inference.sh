@@ -11,6 +11,17 @@ INTERVAL_SECONDS="${RKVOICE_RKNN_PROFILE_INTERVAL:-0.1}"
 
 mkdir -p "$RUNTIME_DIR/output"
 
+if [ "$#" -eq 0 ]; then
+    audios_dir="$RUNTIME_DIR/audios"
+    wav_args=()
+    if [ -d "$audios_dir" ]; then
+        while IFS= read -r f; do wav_args+=("$f"); done < <(find "$audios_dir" -maxdepth 1 -name '*.wav' -type f | sort)
+    fi
+    if [ "${#wav_args[@]}" -gt 0 ]; then
+        set -- "${wav_args[@]}"
+    fi
+fi
+
 if [ ! -r "$LOAD_FILE" ]; then
     echo "Cannot read $LOAD_FILE"
     exit 1
@@ -29,7 +40,7 @@ monitor_pid="$!"
 trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
 
 status=0
-if RKNN_LOG_LEVEL="${RKNN_LOG_LEVEL:-4}" RKVOICE_ASR_PROVIDER=rknn "$RUNTIME_DIR/run_asr.sh" "$@" 2>&1 | tee "$RKNN_RUNTIME_LOG"; then
+if RKNN_LOG_LEVEL="${RKNN_LOG_LEVEL:-4}" "$RUNTIME_DIR/run_asr.sh" "$@" 2>&1 | tee "$RKNN_RUNTIME_LOG"; then
     status=0
 else
     status=$?

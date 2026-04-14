@@ -11,11 +11,11 @@ from typing import Sequence
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
 try:
-    from scripts.delivery.sherpa_onnx_rk3588.config import DEFAULT_RUNTIME_DIR, load_local_settings, resolve_path_option, resolve_text_option
+    from scripts.delivery.config import ASR_DEFAULT_RUNTIME_DIR as DEFAULT_RUNTIME_DIR, load_local_settings, resolve_path_option, resolve_text_option
 except ImportError:
     if str(WORKSPACE_ROOT) not in sys.path:
         sys.path.insert(0, str(WORKSPACE_ROOT))
-    from scripts.delivery.sherpa_onnx_rk3588.config import DEFAULT_RUNTIME_DIR, load_local_settings, resolve_path_option, resolve_text_option
+    from scripts.delivery.config import ASR_DEFAULT_RUNTIME_DIR as DEFAULT_RUNTIME_DIR, load_local_settings, resolve_path_option, resolve_text_option
 
 
 DEFAULT_IMAGE_TAG = "rkvoice/rknn-toolkit2-profile:2.3.2-py312"

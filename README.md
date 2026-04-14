@@ -1,15 +1,11 @@
 # RK3588 离线 ASR + TTS 交付工程
 
-本项目用于在 RK3588 / A588 开发板上完成离线语音能力的工程化交付，当前默认主线基于 sherpa-onnx，包含：
+本项目用于在 RK3588 / A588 开发板上完成离线语音能力的工程化交付，包含两条主线：
 
-- sherpa-onnx RK3588 运行包下载、组装、上板与冒烟
-- ASR 的 CPU/ONNX 基线与 RKNN/NPU 验证路径
-- 中文 TTS 的 CPU/ONNX 基线运行包
-- MeloTTS-RKNN2 的可选 Python + RKNN TTS 运行包
+- ASR：基于 sherpa-onnx，支持 CPU/ONNX 基线、RKNN/NPU 验证路径与流式识别
+- TTS：基于 MeloTTS-RKNN2，Python + RKNN 离线中文语音合成
 - 板卡网络初始化脚本、发布打包脚本与单元测试入口
 - 指标、差距、部署说明与选型报告
-
-历史 PaddleSpeech TTSArmLinux 交付链仍保留在 scripts/delivery/paddlespeech_tts_armlinux/，作为中文 CPU 基线与对照路径。
 
 ## 目录结构
 
@@ -29,7 +25,6 @@
 ├─ scripts/
 │  ├─ board/
 │  ├─ delivery/
-│  │  ├─ paddlespeech_tts_armlinux/
 │  │  ├─ melotts_rknn2/
 │  │  ├─ sherpa_onnx_rk3588/
 │  │  └─ templates/
@@ -47,9 +42,9 @@
 
 - 推荐通过 uv run 执行 Python 入口；对于包化的 delivery CLI，推荐使用 python -m 形式。
 - 实际实现位于 scripts/board、scripts/delivery 和 scripts/release。
-- 默认交付主线位于 scripts/delivery/sherpa_onnx_rk3588/，按 source bundle、runtime assemble、upload/deploy、cli 拆分实现。
-- scripts/delivery/melotts_rknn2/ 提供可选的 Python + RKNN TTS 运行包，build 时会准备离线 wheelhouse，upload/all 时会在板端自动安装到运行包内的 pydeps/。
-- scripts/delivery/paddlespeech_tts_armlinux/ 保留为历史 CPU 基线，不再是默认入口。
+- ASR 和 TTS 交付管线统一位于 scripts/delivery/，通过 `asr` / `tts` 子命令区分管线，共享 config、remote、shared 基础设施。
+- ASR 管线 (sherpa-onnx RK3588) 按 source bundle → runtime assemble → upload/deploy 流程实现。
+- TTS 管线 (MeloTTS-RKNN2) 提供 Python + RKNN TTS 运行包，build 时准备离线 wheelhouse，upload/all 时在板端自动安装到运行包内的 pydeps/。
 - scripts/delivery/templates/ 保存运行包 shell 模板，避免在 Python 入口中内嵌大段板端脚本。
 
 ## Python 环境
@@ -66,19 +61,19 @@ uv sync
 常用命令：
 
 ```powershell
-uv run python -m scripts.delivery.sherpa_onnx_rk3588 download
-uv run python -m scripts.delivery.sherpa_onnx_rk3588 build
-uv run python -m scripts.delivery.sherpa_onnx_rk3588 all --source-ip 169.254.46.223
-uv run python -m scripts.delivery.melotts_rknn2 download
-uv run python -m scripts.delivery.melotts_rknn2 build
-uv run python -m scripts.delivery.melotts_rknn2 all --source-ip 169.254.46.223
+uv run python -m scripts.delivery asr download
+uv run python -m scripts.delivery asr build
+uv run python -m scripts.delivery asr all --source-ip 169.254.46.223
+uv run python -m scripts.delivery tts download
+uv run python -m scripts.delivery tts build
+uv run python -m scripts.delivery tts all --source-ip 169.254.46.223
 uv run python -m tests
 uv run python -m scripts.testing.rkvoice_report
 uv run python scripts/board/prepare_rknn_debug_bridge.py
 uv run python scripts/testing/rknn_toolkit2_profile_in_docker.py --prepare-board-debug-bridge
 uv run python scripts/board/set_board_static_ipv4.py
-uv run python scripts/release/package_release.py --version v1.0.0 --include-runtime-bundle --include-evidence --include-melo-runtime-bundle --include-melo-evidence
-uv run python scripts/release/package_release_in_docker.py --version v1.0.0 --include-runtime-bundle --include-evidence --include-melo-runtime-bundle --include-melo-evidence
+uv run python scripts/release/package_release.py --version v1.0.0 --include-asr-runtime-bundle --include-asr-evidence --include-tts-runtime-bundle --include-tts-evidence
+uv run python scripts/release/package_release_in_docker.py --version v1.0.0 --include-asr-runtime-bundle --include-asr-evidence --include-tts-runtime-bundle --include-tts-evidence
 ```
 
 ## 单元测试
@@ -121,7 +116,6 @@ uv run python -m scripts.testing.rkvoice_report --fail-on-requirement-failures
 
 ## 文档位置
 
-- 部署方案：docs/architecture/PaddleSpeech_RK3588_RKNN部署说明.md
 - 项目指标：docs/requirements/项目指标.md
 - 指标差距：docs/requirements/项目指标差距清单.md
 - 选型报告：docs/reports/免费商用离线TTS技术选型详细汇报报告.md
@@ -137,7 +131,7 @@ uv run python -m scripts.testing.rkvoice_report --fail-on-requirement-failures
 - 本地敏感连接信息放在 config/local/
 - 示例模板放在 config/examples/
 - 不建议把板卡密码、源地址等信息写入可交付文档
-- 新主线默认使用 RKVOICE_* 环境变量；为兼容历史流程，delivery CLI 仍接受旧的 TTS_* 环境变量
+- ASR 主线默认使用 RKVOICE_* 环境变量；为兼容历史流程，delivery CLI 仍接受旧的 TTS_* 环境变量
 
 推荐配置文件：
 
@@ -174,31 +168,25 @@ MeloTTS-RKNN2 额外支持以下运行期变量：
 
 当前默认运行包目录：
 
-- artifacts/runtime/sherpa_onnx_rk3588_runtime/
+- artifacts/runtime/sherpa_onnx_rk3588_runtime/ （ASR）
+- artifacts/runtime/melotts_rknn2_runtime/ （TTS）
 
-当前默认运行包形态：
+当前 ASR 运行包形态：
 
 - bin/sherpa-onnx-offline
-- bin/sherpa-onnx-offline-tts
 - lib/libsherpa-onnx-c-api.so
 - models/asr/cpu/sense-voice/
 - models/asr/rknn/sense-voice-rk3588-20s/
-- models/tts/vits-icefall-zh-aishell3/
 - run_asr.sh
-- run_tts.sh
 - smoketest.sh
 
 当前后端支持状态：
 
 - ASR CPU/ONNX：可用
 - ASR RKNN/NPU：可用，要求板端提供兼容版本的 librknnrt.so
-- TTS CPU/ONNX：可用
-- TTS MeloTTS-RKNN2：可选验证路径，要求板端提供 python3；运行包会自带离线 wheelhouse 并在 upload/all 时自动安装 onnxruntime、soundfile、cn2an、inflect 和 rknn-toolkit-lite2 到 pydeps/
-- TTS RKNN/NPU：不是当前默认交付目标
+- TTS MeloTTS-RKNN2：交付主线，要求板端提供 python3；运行包会自带离线 wheelhouse 并在 upload/all 时自动安装 onnxruntime、soundfile、cn2an、inflect 和 rknn-toolkit-lite2 到 pydeps/
 
-默认 TTS 模型仅作为技术基线，商业交付前应再次核验上游模型与数据许可。
-
-MeloTTS-RKNN2 上游镜像当前标注为 AGPL-3.0，因此即使技术上可跑，也不应在未完成法务评估前直接替换当前默认商业交付主线。
+MeloTTS-RKNN2 上游镜像当前标注为 AGPL-3.0，商业交付前应完成法务评估。
 
 当前默认冒烟结果目录：
 

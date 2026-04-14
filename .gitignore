@@ -9,6 +9,7 @@ config/local/
 
 # Generated build, packaging, and delivery artifacts
 artifacts/
+audios/
 
 # OS metadata
 Thumbs.db

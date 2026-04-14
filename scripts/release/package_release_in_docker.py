@@ -75,10 +75,10 @@ def build_release_args(
     package_name: str,
     version: str,
     release_notes_path: str | None,
-    include_runtime_bundle: bool,
-    include_evidence: bool,
-    include_melo_runtime_bundle: bool,
-    include_melo_evidence: bool,
+    include_asr_runtime_bundle: bool,
+    include_asr_evidence: bool,
+    include_tts_runtime_bundle: bool,
+    include_tts_evidence: bool,
 ) -> list[str]:
     args = ["--package-name", package_name]
     if version:
@@ -87,14 +87,14 @@ def build_release_args(
         args.extend(["--output-root", output_root])
     if release_notes_path:
         args.extend(["--release-notes-path", release_notes_path])
-    if include_runtime_bundle:
-        args.append("--include-runtime-bundle")
-    if include_evidence:
-        args.append("--include-evidence")
-    if include_melo_runtime_bundle:
-        args.append("--include-melo-runtime-bundle")
-    if include_melo_evidence:
-        args.append("--include-melo-evidence")
+    if include_asr_runtime_bundle:
+        args.append("--include-asr-runtime-bundle")
+    if include_asr_evidence:
+        args.append("--include-asr-evidence")
+    if include_tts_runtime_bundle:
+        args.append("--include-tts-runtime-bundle")
+    if include_tts_evidence:
+        args.append("--include-tts-evidence")
     return args
 
 
@@ -123,10 +123,10 @@ def build_docker_run_command(
     package_name: str,
     version: str,
     release_notes_path: Path | None,
-    include_runtime_bundle: bool,
-    include_evidence: bool,
-    include_melo_runtime_bundle: bool,
-    include_melo_evidence: bool,
+    include_asr_runtime_bundle: bool,
+    include_asr_evidence: bool,
+    include_tts_runtime_bundle: bool,
+    include_tts_evidence: bool,
 ) -> list[str]:
     command = [
         "docker",
@@ -174,10 +174,10 @@ def build_docker_run_command(
             package_name=package_name,
             version=version,
             release_notes_path=mapped_release_notes_path,
-            include_runtime_bundle=include_runtime_bundle,
-            include_evidence=include_evidence,
-            include_melo_runtime_bundle=include_melo_runtime_bundle,
-            include_melo_evidence=include_melo_evidence,
+            include_asr_runtime_bundle=include_asr_runtime_bundle,
+            include_asr_evidence=include_asr_evidence,
+            include_tts_runtime_bundle=include_tts_runtime_bundle,
+            include_tts_evidence=include_tts_evidence,
         )
     )
     return command
@@ -192,10 +192,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--package-name", default=DEFAULT_PACKAGE_NAME, help="Release package prefix")
     parser.add_argument("--version", default="", help="Release version label")
     parser.add_argument("--release-notes-path", type=Path, default=None, help="Custom release notes template or rendered notes source")
-    parser.add_argument("--include-runtime-bundle", action="store_true", help="Include artifacts/runtime/sherpa_onnx_rk3588_runtime.tar.gz")
-    parser.add_argument("--include-evidence", action="store_true", help="Include artifacts/runtime/sherpa_onnx_rk3588_runtime/output")
-    parser.add_argument("--include-melo-runtime-bundle", action="store_true", help="Include artifacts/runtime/melotts_rknn2_runtime.tar.gz")
-    parser.add_argument("--include-melo-evidence", action="store_true", help="Include artifacts/runtime/melotts_rknn2_runtime/output")
+    parser.add_argument("--include-asr-runtime-bundle", "--include-runtime-bundle", action="store_true", help="Include artifacts/runtime/sherpa_onnx_rk3588_runtime.tar.gz")
+    parser.add_argument("--include-asr-evidence", "--include-evidence", action="store_true", help="Include artifacts/runtime/sherpa_onnx_rk3588_runtime/output")
+    parser.add_argument("--include-tts-runtime-bundle", "--include-melo-runtime-bundle", action="store_true", help="Include artifacts/runtime/melotts_rknn2_runtime.tar.gz")
+    parser.add_argument("--include-tts-evidence", "--include-melo-evidence", action="store_true", help="Include artifacts/runtime/melotts_rknn2_runtime/output")
     return parser.parse_args(argv)
 
 
@@ -224,10 +224,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             package_name=args.package_name,
             version=args.version,
             release_notes_path=args.release_notes_path,
-            include_runtime_bundle=args.include_runtime_bundle,
-            include_evidence=args.include_evidence,
-            include_melo_runtime_bundle=args.include_melo_runtime_bundle,
-            include_melo_evidence=args.include_melo_evidence,
+            include_asr_runtime_bundle=args.include_asr_runtime_bundle,
+            include_asr_evidence=args.include_asr_evidence,
+            include_tts_runtime_bundle=args.include_tts_runtime_bundle,
+            include_tts_evidence=args.include_tts_evidence,
         )
     )
     return run_status
